@@ -5,17 +5,18 @@
 
 struct ws
 {
-	void (*fn)(void *, void *, size_t);
+	void (*fn)(void *, void *, size_t, size_t);
 	void *user;
 	struct lws *wsi;
 	struct lws_context *ctx;
 	int interrupted;
 	pthread_mutex_t *send_lock;
+	pthread_t worker;
 };
 
 struct ws *ws_init();
 int ws_start(struct ws *w);
 int ws_send_buf(struct ws *w, char *buf, size_t len);
-void ws_register_recv_cb(struct ws *w, void (*fn)(void *, void *, size_t), void *user);
+void ws_register_recv_cb(struct ws *w, void (*fn)(void *, void *, size_t, size_t), void *user);
 
 #endif

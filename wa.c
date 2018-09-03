@@ -11,40 +11,12 @@
 
 #include "wa.h"
 #include "ws.h"
+#include "crypto.h"
+
 
 #include <json-c/json.h>
 
 void qr_encode(char *s);
-
-char* b64_encode(char* buf, size_t len)
-{
-	BIO *b64, *mem;
-	BUF_MEM *bptr;
-	char *buff;
-
-	// Shit, this base64 thing with openssl was hard to get right.
-
-	b64 = BIO_new(BIO_f_base64());
-	mem = BIO_new(BIO_s_mem());
-
-	// No b64 newlines.
-	BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-
-	b64 = BIO_push(b64, mem);
-
-	BIO_write(b64, buf, len);
-	BIO_flush(b64);
-
-	BIO_get_mem_ptr(b64, &bptr);
-
-	buff = (char *) malloc(bptr->length);
-	memcpy(buff, bptr->data, bptr->length-1);
-	buff[bptr->length-1] = 0;
-
-	BIO_free_all(b64);
-
-	return buff;
-}
 
 static char *generate_client_id()
 {
@@ -71,7 +43,7 @@ int generate_QR(struct wa *w)
 	char buf[1024];
 	int len;
 
-	len = snprintf(buf, 1024, "%s,%s,%s", w->ref, "thisisthekeeey", w->client_id);
+	len = snprintf(buf, 1024, "%s,%s,%s", w->ref, w->pubkey, w->client_id);
 	if (len >= 1024)
 		return -1;
 
@@ -138,7 +110,7 @@ int wa_action_init(struct wa *w)
 
 struct recv_filter *wa_recv_filter_init()
 {
-	struct recv_filter *rf = malloc(sizeof(*rf));
+	struct recv_filter *rf = calloc(sizeof(*rf), 1);
 
 	rf->lock = malloc(sizeof(*(rf->lock)));
 	pthread_mutex_init(rf->lock, NULL);
@@ -175,8 +147,8 @@ struct wa_msg *wa_msg_init(char *tag, char *cmd)
 
 void wa_msg_free(struct wa_msg *msg)
 {
-	if(msg->tag) free(msg->tag);
-	if(msg->cmd) free(msg->cmd);
+	//free(msg->tag);
+	//free(msg->cmd);
 	free(msg);
 }
 
@@ -201,18 +173,16 @@ char *wa_msg_to_buf(struct wa_msg *msg, char **alloc_buf, size_t *len)
 	return msg_buf;
 }
 
-int wa_buf_to_msg(char *buf, struct wa_msg **msg_ptr)
+int wa_buf_to_msg(char *buf, size_t len, struct wa_msg **msg_ptr)
 {
-	char *tag, *cmd, *sep;
+	char *sep;
+	struct wa_msg *msg = malloc(sizeof(*msg));
 
 	sep = strchr(buf, ',');
 	*sep = '\0';
-	tag = strdup(buf);
-	cmd = strdup(sep + 1);
 
-	struct wa_msg *msg = malloc(sizeof(*msg));
-	msg->tag = tag;
-	msg->cmd = cmd;
+	msg->tag = buf;
+	msg->cmd = sep + 1;
 
 	*msg_ptr = msg;
 	return 0;
@@ -336,7 +306,7 @@ int wa_recv_cb(struct recv_filter *rf, struct wa_msg *msg)
 	if (!found)
 	{
 		//Drop
-		fprintf(stderr, "DROP: %s\n", msg->cmd);
+		fprintf(stderr, "DROP: %s\n", msg->tag);
 	}
 
 	pthread_mutex_unlock(rf->lock);
@@ -345,26 +315,94 @@ int wa_recv_cb(struct recv_filter *rf, struct wa_msg *msg)
 }
 
 
-void wa_recv_buf_cb(void *user, void *data, size_t len)
+void wa_recv_buf_cb(void *user, void *data, size_t len, size_t remaining)
 {
 	struct recv_filter *rf = (struct recv_filter *) user;
-	char *buf = (char *) data;
+	char *buf = NULL;
 	struct wa_msg *msg;
+	size_t total_size = len + remaining;
+	size_t acc;
 
-	wa_buf_to_msg(buf, &msg);
+	if(rf->buf)
+	{
+		acc = rf->ptr - rf->buf + len;
+		if(acc > rf->buf_size)
+		{
+			fprintf(stderr, "%s: FATAL buf_size exceeded buf_size:%d accum_len:%d\n",
+				       __func__, rf->buf_size, acc);
+			abort();
+		}
+
+		memcpy(rf->ptr, data, len);
+		rf->ptr += len;
+
+		if(!remaining)
+		{
+			buf = rf->buf;
+			rf->buf = NULL;
+			rf->ptr = NULL;
+		}
+	}
+	else
+	{
+		if(remaining)
+		{
+			rf->buf_size = total_size + 1;
+			rf->buf = malloc(total_size + 1);
+			rf->ptr = rf->buf;
+
+			memcpy(rf->ptr, data, len);
+			rf->ptr += len;
+		}
+		else
+		{
+			buf = malloc(total_size + 1);
+			memcpy(buf, data, len);
+		}
+	}
+
+
+	if (!buf)
+		return;
+
+	buf[total_size] = '\0';
+	wa_buf_to_msg(buf, total_size, &msg);
 
 	if (!wa_recv_cb(rf, msg))
+	{
+		/* TODO: Don't drop, place in queue and signal main cond */
+
+		/* Drop */
+		free(buf);
 		wa_msg_free(msg);
+	}
+}
+
+int wa_keys_init(struct wa *w)
+{
+	if(generate_keys(&(w->keypair)))
+		return -1;
+
+	w->pubkey = get_public_key(w->keypair);
+	if(!w->pubkey)
+		return -1;
+
+	return 0;
+}
+
+void wa_loop(struct wa *w)
+{
+	pthread_join(w->ws->worker, NULL);
 }
 
 struct wa *wa_init()
 {
-	struct wa *w = malloc(sizeof(struct wa));
-	memset(w, sizeof(struct wa), 0);
-
+	struct wa *w = calloc(1, sizeof(struct wa));
 
 	w->rf = wa_recv_filter_init();
 	w->ws = ws_init();
+
+	wa_keys_init(w);
 
 	ws_register_recv_cb(w->ws, wa_recv_buf_cb, (void *) w->rf);
 

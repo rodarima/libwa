@@ -16,8 +16,10 @@ static int interrupted, rx_seen, test, connected=0;
 
 int callback(struct lws* wsi, enum lws_callback_reasons reason, void *user, void* in, size_t len)
 {
-	//printf("Callback called. Reason %d\n", reason);
+	printf("Callback called. Reason %d\n", reason);
 	struct ws *w = (struct ws *) user;
+	size_t remaining;
+
 	//fprintf(stderr, "got user: %p\n", w);
 
 	switch (reason) {
@@ -34,9 +36,10 @@ int callback(struct lws* wsi, enum lws_callback_reasons reason, void *user, void
 			break;
 
 		case LWS_CALLBACK_CLIENT_RECEIVE:
-			printf("RX: %s\n", (const char *)in);
+			remaining = lws_remaining_packet_payload(wsi);
+			printf("RX(%d)\n", len);
 			if(w->fn)
-				w->fn(w->user, in, len);
+				w->fn(w->user, in, len, remaining);
 			//rx_seen++;
 			//if (test && rx_seen == 10)
 			interrupted = 1;
@@ -151,7 +154,7 @@ void ws_free(struct ws *w)
 	//if (w->wsi) free(w->wsi);
 }
 
-void ws_register_recv_cb(struct ws *w, void (fn)(void *, void *, size_t), void *user)
+void ws_register_recv_cb(struct ws *w, void (fn)(void *, void *, size_t, size_t), void *user)
 {
 	w->fn = fn;
 	w->user = user;
@@ -200,11 +203,9 @@ int ws_send_buf(struct ws *w, char *buf, size_t len)
 
 int ws_start(struct ws *w)
 {
-	pthread_t *th = malloc(sizeof(*th));
-
 	ws_connect(w);
 
-	return pthread_create(th, NULL, ws_worker, (void *) w);
+	return pthread_create(&w->worker, NULL, ws_worker, (void *) w);
 }
 
 struct ws *ws_init()
