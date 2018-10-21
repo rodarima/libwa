@@ -19,3 +19,8 @@ Based on the great reverse engineering work of sigalor:
 
 The library will provide a simple way to build clients. For instance a bitlbee
 plugin to add WhatsApp as an available protocol to IRC.
+
+### Current status
+
+By now it can only connect to the WhatsApp websocket server, login using the QR
+and start receiving messages.
