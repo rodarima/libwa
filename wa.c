@@ -5,6 +5,7 @@
 #include <openssl/pem.h>
 #include <string.h>
 #include <libwebsockets.h>
+#include <uthash.h>
 
 #define WA_WEB_VERSION "[0,3,557]"
 #define WA_WEB_CLIENT "[\"libwa\",\"Chromium\"]"
@@ -258,18 +259,14 @@ struct wa_msg *wa_request(struct wa *w, struct wa_msg *msg)
 struct tag_filter *wa_filter_add(struct recv_filter *rf, char *tag)
 {
 	struct tag_filter *tf = malloc(sizeof(*tf));
-	struct tag_filter **p = &rf->tf;
 
 	tf->tag = tag;
-	tf->next = NULL;
 	tf->cond = malloc(sizeof(*(tf->cond)));
-
 	pthread_cond_init(tf->cond, NULL);
 
 	pthread_mutex_lock(rf->lock);
 
-	while (*p) *p = (*p)->next;
-	*p = tf;
+	HASH_ADD_KEYPTR(hh, rf->tf, tf->tag, strlen(tf->tag), tf);
 
 	pthread_mutex_unlock(rf->lock);
 
@@ -277,41 +274,37 @@ struct tag_filter *wa_filter_add(struct recv_filter *rf, char *tag)
 }
 
 
-int wa_recv_cb(struct recv_filter *rf, struct wa_msg *msg)
+struct tag_filter *wa_recv_cb(struct recv_filter *rf, struct wa_msg *msg)
 {
+
+	const char *tag = msg->tag;
+	struct tag_filter *tf;
+
 	pthread_mutex_lock(rf->lock);
 
-	struct tag_filter **p = &rf->tf;
-	int found = 0;
+	HASH_FIND_STR(rf->tf, tag, tf);
 
 	fprintf(stderr, "%s: received msg tag:%s\n", __func__, msg->tag);
-	while (*p)
-	{
-		// Tag found?
-		fprintf(stderr, "%s: looking for tag:%s\n", __func__, (*p)->tag);
-		if(strcmp(msg->tag, (*p)->tag) == 0)
-		{
-			//Remove from filter and signal
-			(*p)->msg = msg;
-			pthread_cond_signal((*p)->cond);
-			fprintf(stderr, "ACCEPTED: tag:%s cmd:%s\n",
-				       msg->tag, msg->cmd);
-			found = 1;
-			*p = (*p)->next;
-			break;
-		}
-		p = &(*p)->next;
-	}
 
-	if (!found)
+	if (!tf)
 	{
 		//Drop
 		fprintf(stderr, "DROP: %s\n", msg->tag);
 	}
+	else
+	{
+		tf->msg = msg;
+		pthread_cond_signal(tf->cond);
+		fprintf(stderr, "ACCEPTED: tag:%s cmd:%s\n",
+			       msg->tag, msg->cmd);
+
+		HASH_DEL(rf->tf, tf);
+		// XXX: Free tf here?
+	}
 
 	pthread_mutex_unlock(rf->lock);
 
-	return found;
+	return tf;
 }
 
 

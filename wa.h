@@ -3,6 +3,7 @@
 
 #include <openssl/evp.h>
 #include <pthread.h>
+#include <uthash.h>
 
 #define MAX_QUEUE 10
 
@@ -14,10 +15,10 @@ struct wa_msg
 
 struct tag_filter
 {
-	char *tag;
+	const char *tag;
 	pthread_cond_t *cond;
 	struct wa_msg *msg;
-	struct tag_filter *next;
+	UT_hash_handle hh;
 };
 
 struct recv_filter
