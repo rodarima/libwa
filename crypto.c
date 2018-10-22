@@ -65,7 +65,7 @@ char *get_public_key(EVP_PKEY *pkey)
 	if (len != 32)
 		return NULL;
 
-	return b64_encode(pub_key_buf, len);
+	return b64_encode((char *) pub_key_buf, len);
 }
 
 /*

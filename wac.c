@@ -2,11 +2,11 @@
 
 int main()
 {
-	struct wa *w = wa_init();
-	wa_login(w);
+	wa_t *wa = wa_init();
+	wa_login(wa);
 
-	wa_loop(w);
-	wa_free(w);
+	wa_loop(wa);
+	wa_free(wa);
 
 
 	return 0;

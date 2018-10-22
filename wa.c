@@ -6,6 +6,7 @@
 #include <string.h>
 #include <libwebsockets.h>
 #include <uthash.h>
+#include <assert.h>
 
 #define WA_WEB_VERSION "[0,3,557]"
 #define WA_WEB_CLIENT "[\"libwa\",\"Chromium\"]"
@@ -27,7 +28,7 @@ static char *generate_client_id()
 
 #define RND_BYTES 16
 	char buf[RND_BYTES], *client_id;
-	if(RAND_bytes(buf, RND_BYTES) <= 0)
+	if(RAND_bytes((unsigned char *)buf, RND_BYTES) <= 0)
 	{
 		return NULL;
 	}
@@ -39,30 +40,32 @@ static char *generate_client_id()
 #undef RND_BYTES
 }
 
-int generate_QR(struct wa *w)
+int generate_QR(wa_t *wa)
 {
 	char buf[1024];
 	int len;
 
-	len = snprintf(buf, 1024, "%s,%s,%s", w->ref, w->pubkey, w->client_id);
+	len = snprintf(buf, 1024, "%s,%s,%s", wa->ref, wa->pubkey, wa->client_id);
 	if (len >= 1024)
 		return -1;
 
 	qr_encode(buf);
 	printf("QR: %s\n", buf);
+
+	return 0;
 }
 
-int wa_action_init(struct wa *w)
+int wa_action_init(wa_t *wa)
 {
 #define BUFSIZE 1024
 
 	//char block[LWS_PRE + BUFSIZE];
-	struct wa_msg *msg, *res;
+	msg_t *msg, *res;
 	int len;
 	char *ref;
 	json_object *jo, *jref;
 
-	if(!w->client_id)
+	if(!wa->client_id)
 	{
 		fprintf(stderr, "client_id is missing\n");
 		return -1;
@@ -73,7 +76,7 @@ int wa_action_init(struct wa *w)
 
 	len = snprintf(msg->cmd, BUFSIZE,
 		"[\"admin\",\"init\",%s,%s,\"%s\",true]",
-		WA_WEB_VERSION, WA_WEB_CLIENT, w->client_id);
+		WA_WEB_VERSION, WA_WEB_CLIENT, wa->client_id);
 
 	if (len >= BUFSIZE)
 	{
@@ -83,9 +86,9 @@ int wa_action_init(struct wa *w)
 
 	msg->tag = strdup("init-001");
 
-	res = wa_request(w, msg);
+	res = wa_request(wa, msg);
 
-	fprintf(stderr, "Received cmd:%s\n", res->cmd);
+	fprintf(stderr, "Received cmd:%s\n", (char *) res->cmd);
 
 	jo = json_tokener_parse(res->cmd);
 
@@ -97,9 +100,9 @@ int wa_action_init(struct wa *w)
 	json_object_put(jo);
 
 	printf("Got ref:%s\n", ref);
-	w->ref = ref;
+	wa->ref = ref;
 
-	generate_QR(w);
+	generate_QR(wa);
 
 	wa_msg_free(msg);
 	wa_msg_free(res);
@@ -109,9 +112,9 @@ int wa_action_init(struct wa *w)
 	return 0;
 }
 
-struct recv_filter *wa_recv_filter_init()
+rf_t *wa_recv_filter_init()
 {
-	struct recv_filter *rf = calloc(sizeof(*rf), 1);
+	rf_t *rf = calloc(sizeof(*rf), 1);
 
 	rf->lock = malloc(sizeof(*(rf->lock)));
 	pthread_mutex_init(rf->lock, NULL);
@@ -121,39 +124,40 @@ struct recv_filter *wa_recv_filter_init()
 	return rf;
 }
 
-void wa_free(struct wa *w)
+void wa_free(wa_t *w)
 {
 	if(w->client_id) free(w->client_id);
 	//ws_free(w);
 	free(w);
 }
 
-int wa_login(struct wa *w)
+int wa_login(wa_t *w)
 {
 	w->client_id = generate_client_id(w);
 	wa_action_init(w);
 
 	//ws_join(w->ws);
+	return 0;
 }
 
 
-struct wa_msg *wa_msg_init(char *tag, char *cmd)
+msg_t *wa_msg_init(char *tag, char *cmd)
 {
-	struct wa_msg *msg = malloc(sizeof(*msg));
+	msg_t *msg = malloc(sizeof(*msg));
 	msg->tag = tag;
 	msg->cmd = cmd;
 
 	return msg;
 }
 
-void wa_msg_free(struct wa_msg *msg)
+void wa_msg_free(msg_t *msg)
 {
 	//free(msg->tag);
 	//free(msg->cmd);
 	free(msg);
 }
 
-char *wa_msg_to_buf(struct wa_msg *msg, char **alloc_buf, size_t *len)
+char *wa_msg_to_buf(msg_t *msg, char **alloc_buf, size_t *len)
 {
 	size_t size = strlen(msg->tag) + strlen(msg->cmd) + 1;
 	char *buf = malloc(LWS_PRE + size + 1);
@@ -174,28 +178,38 @@ char *wa_msg_to_buf(struct wa_msg *msg, char **alloc_buf, size_t *len)
 	return msg_buf;
 }
 
-int wa_buf_to_msg(char *buf, size_t len, struct wa_msg **msg_ptr)
+msg_t *wa_packet_to_msg(packet_t *pkt)
 {
 	char *sep;
-	struct wa_msg *msg = malloc(sizeof(*msg));
+	void *cmd;
 
-	sep = strchr(buf, ',');
+	msg_t *msg = malloc(sizeof(*msg));
+
+	sep = strchr(pkt->buf, ',');
+	assert(sep);
 	*sep = '\0';
+	cmd = sep + 1;
 
-	msg->tag = buf;
-	msg->cmd = sep + 1;
+	// We copy here the whole message again...
 
-	*msg_ptr = msg;
-	return 0;
+	msg->tag = strdup(pkt->buf);
+	msg->len = pkt->total - strlen(msg->tag) - 1;
+	msg->cmd = malloc(msg->len);
+	assert(msg->cmd);
+	memcpy(msg->cmd, cmd, msg->len);
+
+	// WARNING: It may not be null terminated!
+
+	return msg;
 }
 
-int wa_send_buf(struct wa *w, char *buf, size_t len)
+int wa_send_buf(wa_t *w, char *buf, size_t len)
 {
 	int sent;
 
 	fprintf(stderr, "%s: sending %s\n", __func__, buf);
 
-	sent = lws_write(w->ws->wsi, buf, len, LWS_WRITE_TEXT);
+	sent = lws_write(w->ws->wsi, (unsigned char *) buf, len, LWS_WRITE_TEXT);
 
 	if(sent != len)
 	{
@@ -206,7 +220,7 @@ int wa_send_buf(struct wa *w, char *buf, size_t len)
 	return sent;
 }
 
-int wa_send(struct wa *w, struct wa_msg *msg)
+int wa_send(wa_t *w, msg_t *msg)
 {
 	char *alloc_buf, *buf;
 	size_t len;
@@ -224,9 +238,9 @@ int wa_send(struct wa *w, struct wa_msg *msg)
 }
 
 
-struct wa_msg *wa_filter_recv(struct recv_filter *rf, struct tag_filter *tf)
+msg_t *wa_filter_recv(rf_t *rf, tf_t *tf)
 {
-	struct wa_msg *msg;
+	msg_t *msg;
 
 	pthread_mutex_lock(rf->lock);
 	//TODO: timedwait
@@ -242,23 +256,23 @@ struct wa_msg *wa_filter_recv(struct recv_filter *rf, struct tag_filter *tf)
 
 }
 
-struct wa_msg *wa_request(struct wa *w, struct wa_msg *msg)
+msg_t *wa_request(wa_t *wa, msg_t *msg)
 {
-	struct tag_filter *tf;
+	tf_t *tf;
 
-	tf = wa_filter_add(w->rf, msg->tag);
+	tf = wa_filter_add(wa->rf, msg->tag);
 
 	fprintf(stderr, "Sending msg:\n\ttag:%s\n\tcmd:%s\n",
-		       msg->tag, msg->cmd);
+		       msg->tag, (char *) msg->cmd);
 
-	wa_send(w, msg);
+	wa_send(wa, msg);
 
-	return wa_filter_recv(w->rf, tf);
+	return wa_filter_recv(wa->rf, tf);
 }
 
-struct tag_filter *wa_filter_add(struct recv_filter *rf, char *tag)
+tf_t *wa_filter_add(rf_t *rf, char *tag)
 {
-	struct tag_filter *tf = malloc(sizeof(*tf));
+	tf_t *tf = malloc(sizeof(*tf));
 
 	tf->tag = tag;
 	tf->cond = malloc(sizeof(*(tf->cond)));
@@ -274,11 +288,11 @@ struct tag_filter *wa_filter_add(struct recv_filter *rf, char *tag)
 }
 
 
-struct tag_filter *wa_recv_cb(struct recv_filter *rf, struct wa_msg *msg)
+int wa_recv_msg(rf_t *rf, msg_t *msg)
 {
-
+	int found = 0;
 	const char *tag = msg->tag;
-	struct tag_filter *tf;
+	tf_t *tf;
 
 	pthread_mutex_lock(rf->lock);
 
@@ -289,89 +303,49 @@ struct tag_filter *wa_recv_cb(struct recv_filter *rf, struct wa_msg *msg)
 	if (!tf)
 	{
 		//Drop
-		fprintf(stderr, "DROP: %s\n", msg->tag);
+		fprintf(stderr, "DROP: tag:%s cmd:%s\n",
+				msg->tag, (char *) msg->cmd);
 	}
 	else
 	{
+		found = 1;
 		tf->msg = msg;
-		pthread_cond_signal(tf->cond);
 		fprintf(stderr, "ACCEPTED: tag:%s cmd:%s\n",
-			       msg->tag, msg->cmd);
+			       msg->tag, (char *) msg->cmd);
 
 		HASH_DEL(rf->tf, tf);
-		// XXX: Free tf here?
+		// Free tf here?
+		// No, the other thread is still waiting on tf->cond
 	}
 
 	pthread_mutex_unlock(rf->lock);
 
-	return tf;
+	if(found)
+		pthread_cond_signal(tf->cond);
+
+	return found;
 }
 
 
-void wa_recv_buf_cb(void *user, void *data, size_t len, size_t remaining)
+void wa_recv_packet_cb(packet_t *pkt, void *user)
 {
-	struct recv_filter *rf = (struct recv_filter *) user;
-	char *buf = NULL;
-	struct wa_msg *msg;
-	size_t total_size = len + remaining;
-	size_t acc;
+	rf_t *rf = (rf_t *) user;
 
-	if(rf->buf)
-	{
-		acc = rf->ptr - rf->buf + len;
-		if(acc > rf->buf_size)
-		{
-			fprintf(stderr, "%s: FATAL buf_size exceeded buf_size:%d accum_len:%d\n",
-				       __func__, rf->buf_size, acc);
-			abort();
-		}
+	msg_t *msg = wa_packet_to_msg(pkt);;
 
-		memcpy(rf->ptr, data, len);
-		rf->ptr += len;
-
-		if(!remaining)
-		{
-			buf = rf->buf;
-			rf->buf = NULL;
-			rf->ptr = NULL;
-		}
-	}
-	else
-	{
-		if(remaining)
-		{
-			rf->buf_size = total_size + 1;
-			rf->buf = malloc(total_size + 1);
-			rf->ptr = rf->buf;
-
-			memcpy(rf->ptr, data, len);
-			rf->ptr += len;
-		}
-		else
-		{
-			buf = malloc(total_size + 1);
-			memcpy(buf, data, len);
-		}
-	}
-
-
-	if (!buf)
+	if(!msg)
 		return;
 
-	buf[total_size] = '\0';
-	wa_buf_to_msg(buf, total_size, &msg);
-
-	if (!wa_recv_cb(rf, msg))
+	if (!wa_recv_msg(rf, msg))
 	{
 		/* TODO: Don't drop, place in queue and signal main cond */
 
-		/* Drop */
-		free(buf);
+		/* Free */
 		wa_msg_free(msg);
 	}
 }
 
-int wa_keys_init(struct wa *w)
+int wa_keys_init(wa_t *w)
 {
 	if(generate_keys(&(w->keypair)))
 		return -1;
@@ -383,21 +357,21 @@ int wa_keys_init(struct wa *w)
 	return 0;
 }
 
-void wa_loop(struct wa *w)
+void wa_loop(wa_t *w)
 {
 	pthread_join(w->ws->worker, NULL);
 }
 
-struct wa *wa_init()
+wa_t *wa_init()
 {
-	struct wa *w = calloc(1, sizeof(struct wa));
+	wa_t *w = calloc(1, sizeof(wa_t));
 
 	w->rf = wa_recv_filter_init();
 	w->ws = ws_init();
 
 	wa_keys_init(w);
 
-	ws_register_recv_cb(w->ws, wa_recv_buf_cb, (void *) w->rf);
+	ws_register_recv_cb(w->ws, wa_recv_packet_cb, (void *) w->rf);
 
 	ws_start(w->ws);
 

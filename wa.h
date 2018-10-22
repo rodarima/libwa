@@ -4,55 +4,54 @@
 #include <openssl/evp.h>
 #include <pthread.h>
 #include <uthash.h>
+#include "ws.h"
 
 #define MAX_QUEUE 10
 
-struct wa_msg
+typedef struct
 {
+	/* We assume tag is always a string */
 	char *tag;
-	char *cmd;
-};
 
-struct tag_filter
+	/* Whereas cmd can be binary data */
+	size_t len;
+	void *cmd;
+	int is_text;
+} msg_t;
+
+typedef struct
 {
 	const char *tag;
 	pthread_cond_t *cond;
-	struct wa_msg *msg;
+	msg_t *msg;
 	UT_hash_handle hh;
-};
+} tf_t;
 
-struct recv_filter
+typedef struct
 {
-	struct tag_filter *tf;
+	tf_t *tf;
 	pthread_mutex_t *lock;
 	pthread_cond_t *cond;
-	struct wa_msg *msg;
+	msg_t *msg;
 
-	/* For receiving multiple frames */
-	size_t buf_size;
-	char *buf;
-	char *ptr;
+} rf_t;
 
-	struct wa_msg *queue[MAX_QUEUE];
-	int queue_index;
-};
-
-struct wa
+typedef struct
 {
 	char *client_id;
 	char *ref;
 	EVP_PKEY *keypair;
 	char *pubkey;
-	struct recv_filter *rf;
-	struct ws *ws;
-};
+	rf_t *rf;
+	ws_t *ws;
+} wa_t;
 
-struct wa *wa_init();
-int wa_login(struct wa *w);
-void wa_free(struct wa *w);
-void wa_loop(struct wa *w);
-struct wa_msg *wa_request(struct wa *w, struct wa_msg *msg);
-void wa_msg_free(struct wa_msg *msg);
-struct tag_filter *wa_filter_add(struct recv_filter *rf, char *tag);
+wa_t *wa_init();
+int wa_login(wa_t *w);
+void wa_free(wa_t *w);
+void wa_loop(wa_t *w);
+msg_t *wa_request(wa_t *w, msg_t *msg);
+void wa_msg_free(msg_t *msg);
+tf_t *wa_filter_add(rf_t *rf, char *tag);
 
 #endif

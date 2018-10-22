@@ -10,17 +10,58 @@
 
 //#define DEBUG
 
+static int
+ws_recv(ws_t *ws, void *in, size_t len, size_t remaining)
+{
+	packet_t *partial = &ws->partial;
 
+	// If is a new packet, allocate the space
+	if(!partial->buf)
+	{
+		size_t total = len + remaining;
+		partial->buf = malloc(total);
+		partial->total = total;
+		partial->end = partial->buf;
+		partial->stored = 0;
+	}
 
-static int interrupted, rx_seen, test, connected=0;
+	if(partial->stored + len > partial->total)
+	{
+		fprintf(stderr, "%s: FATAL: packet exceeds total size %lu\n",
+			       __func__, partial->total);
+		//TODO: What should we do if this happens? Discard the
+		//frame?
+		abort();
+	}
 
-int callback(struct lws* wsi, enum lws_callback_reasons reason, void *user, void* in, size_t len)
+	// Copy the fragment
+	memcpy(partial->end, in, len);
+	partial->end += len;
+	partial->stored += len;
+
+	// Packet complete
+	if(partial->stored == partial->total)
+	{
+		if(ws->recv_fn)
+			ws->recv_fn(partial, ws->recv_user);
+
+		free(partial->buf);
+		partial->buf = NULL;
+		partial->end = NULL;
+		partial->total = 0;
+		partial->stored = 0;
+	}
+
+	return 0;
+}
+
+int
+callback(struct lws* wsi, enum lws_callback_reasons reason, void *user,
+		void* in, size_t len)
 {
 	printf("Callback called. Reason %d\n", reason);
-	struct ws *w = (struct ws *) user;
+	ws_t *ws = (ws_t *) user;
 	size_t remaining;
-
-	//fprintf(stderr, "got user: %p\n", w);
 
 	switch (reason) {
 
@@ -31,23 +72,19 @@ int callback(struct lws* wsi, enum lws_callback_reasons reason, void *user, void
 			break;
 
 		case LWS_CALLBACK_CLIENT_ESTABLISHED:
-			connected = 1;
+			ws->connected = 1;
 			printf("Connection established\n");
 			break;
 
 		case LWS_CALLBACK_CLIENT_RECEIVE:
 			remaining = lws_remaining_packet_payload(wsi);
-			printf("RX(%d)\n", len);
-			if(w->fn)
-				w->fn(w->user, in, len, remaining);
-			//rx_seen++;
-			//if (test && rx_seen == 10)
-			interrupted = 1;
+			printf("RX(%lu)\n", len);
+			ws_recv(ws, in, len, remaining);
 			break;
 
 		case LWS_CALLBACK_CLIENT_CLOSED:
 			printf("%s: closed\n", __func__);
-			interrupted = 1;
+			ws->interrupted = 1;
 			break;
 
 		default:
@@ -63,33 +100,7 @@ static struct lws_protocols protocols[] =
 	{ NULL, NULL, 0 }
 };
 
-
-int request_QR(struct lws* wsi)
-{
-#define BUFSIZE 1024
-
-	/*
-	char block[LWS_PRE + BUFSIZE];
-	char *buf = block[LWS_PRE];
-	int copied;
-
-	copied = snprintf(buf, BUFSIZE,
-		"[\"admin\",\"%s\",%s,%s,\"%s\",true]",
-		action, version, browser, client_id);
-
-	if (copied >= BUFSIZE)
-	{
-		fprintf(stderr, "BUFSIZE too small, aborting\n");
-		return -1;
-	}
-*/
-	//printf("BUFFER: %s\n", generate_client_id());
-	//lws_write(wsi, buf, BUFSIZE, LWS_WRITE_TEXT);
-
-#undef BUFSIZE
-}
-
-int ws_connect(struct ws *w)
+int ws_connect(ws_t *ws)
 {
 	lws_set_log_level(LLL_ERR | LLL_WARN, NULL);
 	//lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO |
@@ -106,10 +117,10 @@ int ws_connect(struct ws *w)
 	params.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT |
 		LWS_SERVER_OPTION_JUST_USE_RAW_ORIGIN;
 
-	w->ctx = lws_create_context(&params);
-	if (!w->ctx) return 1;
+	ws->ctx = lws_create_context(&params);
+	if (!ws->ctx) return 1;
 
-	info.context = w->ctx;
+	info.context = ws->ctx;
 
 #ifdef DEBUG
 
@@ -126,71 +137,74 @@ int ws_connect(struct ws *w)
 	info.address = info.host;
 	info.path = "/ws";
 	info.origin = "https://web.whatsapp.com";
-	info.userdata = (void *) w;
+
+	/* Here we set the pointer to our own data, available in the callback */
+	info.userdata = (void *) ws;
 	//info.protocol = protocols[0].name;
 
-	fprintf(stderr, "set user: %p\n", w);
+	fprintf(stderr, "set user: %p\n", ws);
 
 	fprintf(stderr, "Connecting websocket\n");
-	w->wsi = lws_client_connect_via_info(&info);
+	ws->wsi = lws_client_connect_via_info(&info);
 
-	//lws_set_wsi_user(w->wsi, (void *) w);
+	while (!ws->connected)
+		lws_service(ws->ctx, 50);
 
-	while (!connected)
-		lws_service(w->ctx, 50);
-
-
+	return 0;
 }
 
-int ws_loop(struct ws *w)
+int ws_loop(ws_t *ws)
 {
-	while (!interrupted)
-		lws_service(w->ctx, 50);
+	while (!ws->interrupted)
+		lws_service(ws->ctx, 50);
+
+	return 0;
 }
 
-void ws_free(struct ws *w)
+void ws_free(ws_t *w)
 {
 	if (w->ctx) lws_context_destroy(w->ctx);
 	//if (w->wsi) free(w->wsi);
 }
 
-void ws_register_recv_cb(struct ws *w, void (fn)(void *, void *, size_t, size_t), void *user)
+void ws_register_recv_cb(ws_t *ws, void (fn)(packet_t*, void *), void *user)
 {
-	w->fn = fn;
-	w->user = user;
+	ws->recv_fn = fn;
+	ws->recv_user = user;
 }
 
 void *ws_worker(void *arg)
 {
-	struct ws *w = (struct ws *) arg;
+	ws_t *ws = (ws_t *) arg;
 
 	fprintf(stderr, "WS thread: were we go!\n");
 
-	while (!w->interrupted)
+	while (!ws->interrupted)
 	{
-		lws_service(w->ctx, 500);
+		lws_service(ws->ctx, 500);
 		//fprintf(stderr, "WS thread: alive!\n");
-		pthread_mutex_lock(w->send_lock);
-		pthread_mutex_unlock(w->send_lock);
+		//pthread_mutex_lock(ws->send_lock);
+		//pthread_mutex_unlock(ws->send_lock);
 	}
 
 	fprintf(stderr, "WS thread: bye!\n");
 
+	return 0;
 }
 
-int ws_send_buf(struct ws *w, char *buf, size_t len)
+int ws_send_buf(ws_t *ws, char *buf, size_t len)
 {
 	int sent;
 
 	fprintf(stderr, "%s: sending %s\n", __func__, buf);
 
-	pthread_mutex_lock(w->send_lock);
+	pthread_mutex_lock(ws->send_lock);
 
-	lws_cancel_service(w->ctx);
+	lws_cancel_service(ws->ctx);
 
-	sent = lws_write(w->wsi, buf, len, LWS_WRITE_TEXT);
+	sent = lws_write(ws->wsi, (unsigned char *) buf, len, LWS_WRITE_TEXT);
 
-	pthread_mutex_unlock(w->send_lock);
+	pthread_mutex_unlock(ws->send_lock);
 
 	if(sent != len)
 	{
@@ -201,25 +215,23 @@ int ws_send_buf(struct ws *w, char *buf, size_t len)
 	return sent;
 }
 
-int ws_start(struct ws *w)
+int ws_start(ws_t *ws)
 {
-	ws_connect(w);
+	ws_connect(ws);
 
-	return pthread_create(&w->worker, NULL, ws_worker, (void *) w);
+	return pthread_create(&ws->worker, NULL, ws_worker, (void *) ws);
 }
 
-struct ws *ws_init()
+ws_t *ws_init()
 {
-	struct ws *w = malloc(sizeof(*w));
+	ws_t *ws = calloc(sizeof(*ws), 1);
 
-	w->fn = NULL;
-	w->user = NULL;
-	w->interrupted = 0;
+	if(!ws) return ws;
 
-	w->send_lock = malloc(sizeof(pthread_mutex_t));
-	pthread_mutex_init(w->send_lock, NULL);
+	ws->send_lock = malloc(sizeof(pthread_mutex_t));
+	pthread_mutex_init(ws->send_lock, NULL);
 
-	return w;
+	return ws;
 }
 
 

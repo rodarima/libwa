@@ -1,5 +1,5 @@
 LDLIBS=-lcrypto -lwebsockets -ljson-c -lqrencode -pthread
-CFLAGS=-g
+CFLAGS=-g -Wall -Werror
 
 all: wac
 
