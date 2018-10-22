@@ -115,9 +115,11 @@ int wa_action_init(wa_t *wa)
 rf_t *wa_recv_filter_init()
 {
 	rf_t *rf = calloc(sizeof(*rf), 1);
+	assert(rf);
 
-	rf->lock = malloc(sizeof(*(rf->lock)));
-	pthread_mutex_init(rf->lock, NULL);
+	pthread_mutex_init(&rf->lock, NULL);
+	pthread_cond_init(&rf->cond, NULL);
+	pthread_cond_init(&rf->done, NULL);
 
 	rf->tf = NULL;
 
@@ -131,15 +133,44 @@ void wa_free(wa_t *w)
 	free(w);
 }
 
-int wa_login(wa_t *w)
+int wa_login(wa_t *wa)
 {
-	w->client_id = generate_client_id(w);
-	wa_action_init(w);
+	wa->client_id = generate_client_id(wa);
+	wa_action_init(wa);
+
 
 	//ws_join(w->ws);
 	return 0;
 }
 
+int
+wa_msg_handle(rf_t *rf)
+{
+	/* Unsolicited message arrived */
+
+	msg_t *msg = rf->msg;
+
+	// Try to get json from cmd
+	// FIXME: null terminate cmd
+	struct json_tokener *tok = json_tokener_new();
+	enum json_tokener_error jerr;
+
+	struct json_object *jo = json_tokener_parse_ex(tok, msg->cmd, msg->len);
+	jerr = json_tokener_get_error(tok);
+
+	if(jerr != json_tokener_success)
+	{
+		fprintf(stderr, "Not json, ignoring tag:%s\n", msg->tag);
+		// Handle errors, as appropriate for your application.
+		return 0;
+	}
+
+	if(jo)
+		fprintf(stderr, "jo is not NULL\n");
+
+	fprintf(stderr, "A json msg was received: %s\n", (char *) msg->cmd);
+	return 0;
+}
 
 msg_t *wa_msg_init(char *tag, char *cmd)
 {
@@ -242,13 +273,13 @@ msg_t *wa_filter_recv(rf_t *rf, tf_t *tf)
 {
 	msg_t *msg;
 
-	pthread_mutex_lock(rf->lock);
+	pthread_mutex_lock(&rf->lock);
 	//TODO: timedwait
-	pthread_cond_wait(tf->cond, rf->lock);
+	pthread_cond_wait(tf->cond, &rf->lock);
 	fprintf(stderr, "%s: Received signal for tag: %s\n",
 			__func__, tf->tag);
 	msg = tf->msg;
-	pthread_mutex_unlock(rf->lock);
+	pthread_mutex_unlock(&rf->lock);
 
 	free(tf);
 
@@ -278,11 +309,11 @@ tf_t *wa_filter_add(rf_t *rf, char *tag)
 	tf->cond = malloc(sizeof(*(tf->cond)));
 	pthread_cond_init(tf->cond, NULL);
 
-	pthread_mutex_lock(rf->lock);
+	pthread_mutex_lock(&rf->lock);
 
 	HASH_ADD_KEYPTR(hh, rf->tf, tf->tag, strlen(tf->tag), tf);
 
-	pthread_mutex_unlock(rf->lock);
+	pthread_mutex_unlock(&rf->lock);
 
 	return tf;
 }
@@ -294,31 +325,24 @@ int wa_recv_msg(rf_t *rf, msg_t *msg)
 	const char *tag = msg->tag;
 	tf_t *tf;
 
-	pthread_mutex_lock(rf->lock);
+	pthread_mutex_lock(&rf->lock);
 
 	HASH_FIND_STR(rf->tf, tag, tf);
 
 	fprintf(stderr, "%s: received msg tag:%s\n", __func__, msg->tag);
 
-	if (!tf)
-	{
-		//Drop
-		fprintf(stderr, "DROP: tag:%s cmd:%s\n",
-				msg->tag, (char *) msg->cmd);
-	}
-	else
+	if(tf)
 	{
 		found = 1;
 		tf->msg = msg;
-		fprintf(stderr, "ACCEPTED: tag:%s cmd:%s\n",
-			       msg->tag, (char *) msg->cmd);
+		fprintf(stderr, "MATCH: Got reply for tag:%s\n", msg->tag);
 
 		HASH_DEL(rf->tf, tf);
 		// Free tf here?
 		// No, the other thread is still waiting on tf->cond
 	}
 
-	pthread_mutex_unlock(rf->lock);
+	pthread_mutex_unlock(&rf->lock);
 
 	if(found)
 		pthread_cond_signal(tf->cond);
@@ -340,8 +364,15 @@ void wa_recv_packet_cb(packet_t *pkt, void *user)
 	{
 		/* TODO: Don't drop, place in queue and signal main cond */
 
+		//TODO: We need a queue otherwise, we risk loosing messages.
+		pthread_mutex_lock(&rf->lock);
+		rf->msg = msg;
+		pthread_cond_signal(&rf->cond);
+		pthread_cond_wait(&rf->done, &rf->lock);
+		pthread_mutex_unlock(&rf->lock);
+
 		/* Free */
-		wa_msg_free(msg);
+		//wa_msg_free(msg);
 	}
 }
 
@@ -357,15 +388,29 @@ int wa_keys_init(wa_t *w)
 	return 0;
 }
 
-void wa_loop(wa_t *w)
+void
+wa_loop(wa_t *wa)
 {
-	pthread_join(w->ws->worker, NULL);
+	rf_t *rf = wa->rf;
+
+	while(wa->run)
+	{
+		pthread_mutex_lock(&rf->lock);
+		pthread_cond_wait(&rf->cond, &rf->lock);
+		wa_msg_handle(rf);
+		pthread_cond_signal(&rf->done);
+		pthread_mutex_unlock(&rf->lock);
+	}
+
+	fprintf(stderr, "Waiting for WS to finish...\n");
+	pthread_join(wa->ws->worker, NULL);
 }
 
 wa_t *wa_init()
 {
 	wa_t *w = calloc(1, sizeof(wa_t));
 
+	w->run = 1;
 	w->rf = wa_recv_filter_init();
 	w->ws = ws_init();
 

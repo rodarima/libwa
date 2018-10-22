@@ -30,18 +30,27 @@ typedef struct
 typedef struct
 {
 	tf_t *tf;
-	pthread_mutex_t *lock;
-	pthread_cond_t *cond;
+	pthread_mutex_t lock;
+
+	/* Unsolicited message */
+	pthread_cond_t cond;
+	pthread_cond_t done;
 	msg_t *msg;
 
 } rf_t;
 
 typedef struct
 {
+	/* Session */
 	char *client_id;
+	char *client_token;
+	char *server_token;
 	char *ref;
 	EVP_PKEY *keypair;
 	char *pubkey;
+
+	/* Internals */
+	int run;
 	rf_t *rf;
 	ws_t *ws;
 } wa_t;
