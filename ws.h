@@ -9,11 +9,14 @@ typedef struct
 	void *end;
 	size_t stored;
 	size_t total;
+
+	/* When sending to libwebsocket, the buffer must be padded */
+	int padded;
 } packet_t;
 
 typedef struct
 {
-	void (*recv_fn)(packet_t *, void *);
+	int (*recv_fn)(packet_t *, void *);
 	void *recv_user;
 
 	packet_t partial;
@@ -31,6 +34,7 @@ typedef struct
 ws_t *ws_init();
 int ws_start(ws_t *ws);
 int ws_send_buf(ws_t *ws, char *buf, size_t len);
-void ws_register_recv_cb(ws_t *ws, void (*fn)(packet_t *, void *), void *user);
+void ws_register_recv_cb(ws_t *ws, int (*fn)(packet_t *, void *), void *user);
+int ws_send_pkt(ws_t *ws, packet_t *pkt);
 
 #endif

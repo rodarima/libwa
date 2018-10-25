@@ -5,19 +5,10 @@
 #include <pthread.h>
 #include <uthash.h>
 #include "ws.h"
+#include "msg.h"
+#include "dispatcher.h"
 
 #define MAX_QUEUE 10
-
-typedef struct
-{
-	/* We assume tag is always a string */
-	char *tag;
-
-	/* Whereas cmd can be binary data */
-	size_t len;
-	void *cmd;
-	int is_text;
-} msg_t;
 
 typedef struct
 {
@@ -51,7 +42,7 @@ typedef struct
 
 	/* Internals */
 	int run;
-	rf_t *rf;
+	dispatcher_t *d;
 	ws_t *ws;
 } wa_t;
 

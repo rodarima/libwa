@@ -167,7 +167,7 @@ void ws_free(ws_t *w)
 	//if (w->wsi) free(w->wsi);
 }
 
-void ws_register_recv_cb(ws_t *ws, void (fn)(packet_t*, void *), void *user)
+void ws_register_recv_cb(ws_t *ws, int (fn)(packet_t*, void *), void *user)
 {
 	ws->recv_fn = fn;
 	ws->recv_user = user;
@@ -190,6 +190,32 @@ void *ws_worker(void *arg)
 	fprintf(stderr, "WS thread: bye!\n");
 
 	return 0;
+}
+
+
+int
+ws_send_pkt(ws_t *ws, packet_t *pkt)
+{
+	int sent;
+
+	fprintf(stderr, "%s: sending %ld bytes\n", __func__, pkt->total);
+
+	pthread_mutex_lock(ws->send_lock);
+
+	lws_cancel_service(ws->ctx);
+
+	sent = lws_write(ws->wsi, (unsigned char *) pkt->end, pkt->total,
+			LWS_WRITE_TEXT);
+
+	pthread_mutex_unlock(ws->send_lock);
+
+	if(sent != pkt->total)
+	{
+		fprintf(stderr, "%s: lws_write failed\n", __func__);
+		return -1;
+	}
+
+	return sent;
 }
 
 int ws_send_buf(ws_t *ws, char *buf, size_t len)

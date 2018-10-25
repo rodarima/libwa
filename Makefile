@@ -5,7 +5,7 @@ all: wac
 
 test: wa.o test.c
 
-wac: wa.o ws.o qr.o crypto.o
+wac: dispatcher.c wa.o ws.o qr.o crypto.o
 
 clean:
 	rm -rf *.o wac
