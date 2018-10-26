@@ -8,6 +8,7 @@
 
 typedef struct
 {
+	const char *tag;
 	msg_t *msg;
 
 	UT_hash_handle hh;
@@ -30,6 +31,10 @@ typedef struct
 	/* Access to the websocket info */
 	ws_t *ws;
 
+	/* Callback function on unsolicited msg */
+	int (*u_fn)(msg_t *, void *);
+	void *u_user;
+
 } dispatcher_t;
 
 
@@ -45,6 +50,13 @@ dispatch_events(dispatcher_t *d);
 msg_t *
 dispatch_request(dispatcher_t *d, const msg_t *msg);
 
+int
+dispatch_queue_tag(dispatcher_t *d, const char *tag);
 
+msg_t *
+dispatch_wait_reply(dispatcher_t *d, const char *tag);
+
+msg_t *
+dispatch_wait_event(dispatcher_t *d, int ms);
 
 #endif

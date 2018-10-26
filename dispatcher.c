@@ -66,6 +66,19 @@ msg_to_packet(const msg_t *msg)
 	return pkt;
 }
 
+void
+ms_to_timespec(int ms, struct timespec *ts)
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+	ts->tv_sec = tv.tv_sec + ms / 1000;
+	ts->tv_nsec = tv.tv_usec * 1000 + 1000000 * (ms % 1000);
+	ts->tv_sec += ts->tv_nsec / 1000000000;
+	ts->tv_nsec %= 1000000000;
+}
+
+
 //int
 //dispatch_unsol_queue(wa_t *wa, dipatch_t *d)
 //{
@@ -113,6 +126,7 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 
 		unsol = malloc(sizeof(reply_t));
 		assert(unsol);
+		unsol->tag = NULL;
 		unsol->msg = msg;
 
 		HASH_ADD_KEYPTR(hh, d->u, msg->tag, strlen(msg->tag), unsol);
@@ -131,7 +145,7 @@ dispatch_recv_packet(packet_t *pkt, void *user)
 
 	msg_t *msg = packet_to_msg(pkt);
 
-	fprintf(stderr, "RECV tag:%s\n", msg->tag);
+	//fprintf(stderr, "RECV tag:%s\n", msg->tag);
 
 	if(!msg)
 		return -1;
@@ -172,7 +186,7 @@ dispatch_send_msg(dispatcher_t *d, const msg_t *msg)
 	return 0;
 }
 
-static int
+int
 dispatch_queue_tag(dispatcher_t *d, const char *tag)
 {
 	reply_t *r;
@@ -189,11 +203,9 @@ dispatch_queue_tag(dispatcher_t *d, const char *tag)
 	r = malloc(sizeof(reply_t));
 	assert(r);
 
-	msg_t *msg = malloc(sizeof(msg_t));
-	assert(msg);
-
-	msg->tag = strdup(tag);
-	r->msg = msg;
+	r->tag = strdup(tag);
+	assert(r->tag);
+	r->msg = NULL;
 
 	HASH_ADD_KEYPTR(hh, d->q, tag, strlen(tag), r);
 
@@ -212,7 +224,7 @@ dispatch_queue_tag(dispatcher_t *d, const char *tag)
 //	return 0;
 //}
 
-static msg_t *
+msg_t *
 dispatch_wait_reply(dispatcher_t *d, const char *tag)
 {
 	reply_t *reply;
@@ -221,12 +233,13 @@ dispatch_wait_reply(dispatcher_t *d, const char *tag)
 	pthread_mutex_lock(&d->lock);
 
 	while(1) {
-		pthread_cond_wait(&d->event, &d->lock);
 		HASH_FIND_STR(d->q, tag, reply);
 
 		/* If our reply has arrived, return inmediately */
-		if(reply)
+		if(reply && reply->msg)
 			break;
+
+		pthread_cond_wait(&d->event, &d->lock);
 	}
 
 	HASH_DEL(d->q, reply);
@@ -281,10 +294,40 @@ dispatch_init()
 	return d;
 }
 
-int
-dispatch_events(dispatcher_t *d)
+msg_t *
+dispatch_wait_event(dispatcher_t *d, int ms)
 {
-	return 0;
+	int end = 0;
+	struct timespec ts;
+	msg_t *msg = NULL;
+	reply_t *reply, *tmp;
+
+	ms_to_timespec(ms, &ts);
+	pthread_mutex_lock(&d->lock);
+
+	while(1)
+	{
+
+		HASH_ITER(hh, d->u, reply, tmp)
+		{
+			assert(reply->msg);
+			msg = reply->msg;
+			HASH_DEL(d->u, reply);
+			free(reply);
+			break;
+		}
+
+		if(msg || end)
+			break;
+
+		pthread_cond_timedwait(&d->event, &d->lock, &ts);
+
+		end = 1;
+	}
+
+	pthread_mutex_unlock(&d->lock);
+
+	return msg;
 }
 
 int

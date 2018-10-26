@@ -147,9 +147,8 @@ wa_restore_session(wa_t *wa)
 int
 wa_new_session(wa_t *wa)
 {
-	/* After the init, a comm message will arrive, hopefully */
-
-	dispatch_wait_reply()
+	/* Generate a QR and wait for the reply */
+	generate_QR(wa);
 
 	return 0;
 }
@@ -171,9 +170,6 @@ wa_login(wa_t *wa)
 		fprintf(stderr, "%s: requesting a new session\n",
 			       __func__);
 
-		/* Generate a QR and wait for the reply */
-		generate_QR(wa);
-
 		wa_new_session(wa);
 	}
 
@@ -184,29 +180,116 @@ wa_login(wa_t *wa)
 }
 
 int
-wa_msg_handle(wa_t *wa, msg_t *msg)
+wa_handle_msg_bin(wa_t *wa, msg_t *msg)
+{
+	/* Ignore by now */
+	fprintf(stderr, "RECV BIN: tag:%s len:%lu\n", msg->tag, msg->len);
+	return 0;
+}
+
+int
+wa_update_keys(wa_t *wa)
+{
+	return 0;
+}
+
+int
+wa_handle_conn(wa_t *wa, struct json_object *array)
+{
+	struct json_object *arg_obj, *ref_obj;
+	const char *ref, *server_tok, *client_tok, *browser_tok, *secret;
+
+	arg_obj = json_object_array_get_idx(array, 1);
+	assert(arg_obj);
+	assert(json_object_is_type(arg_obj, json_type_object));
+
+	ref_obj = json_object_object_get(arg_obj, "ref");
+	assert(ref_obj);
+	ref = json_object_get_string(ref_obj);
+	assert(ref);
+
+	server_tok = json_object_get_string(
+			json_object_object_get(arg_obj, "serverToken"));
+	assert(server_tok);
+	wa->server_token = strdup(server_tok);
+
+	client_tok = json_object_get_string(
+			json_object_object_get(arg_obj, "clientToken"));
+	assert(client_tok);
+	wa->client_token = strdup(client_tok);
+
+	browser_tok = json_object_get_string(
+			json_object_object_get(arg_obj, "browserToken"));
+	assert(browser_tok);
+	wa->browser_token = strdup(browser_tok);
+
+	secret = json_object_get_string(
+			json_object_object_get(arg_obj, "secret"));
+	assert(secret);
+	wa->secret = strdup(secret);
+
+
+	fprintf(stderr, "---------------- New session ---------------\n");
+	fprintf(stderr, "server_token: %s\n", wa->server_token);
+	fprintf(stderr, "client_token: %s\n", wa->client_token);
+	fprintf(stderr, "browser_token: %s\n", wa->browser_token);
+	fprintf(stderr, "secret: %s\n", wa->secret);
+	fprintf(stderr, "--------------------------------------------\n");
+
+	wa_update_keys(wa);
+
+	return 0;
+}
+
+int
+wa_handle_json_array(wa_t *wa, struct json_object *array)
+{
+	struct json_object* action_obj;
+	const char *action;
+
+	action_obj = json_object_array_get_idx(array, 0);
+	assert(action_obj);
+	action = json_object_get_string(action_obj);
+	assert(action);
+
+	if(strcmp(action, "Conn") == 0)
+		return wa_handle_conn(wa, array);
+
+	return 0;
+}
+
+int
+wa_handle_msg(wa_t *wa, msg_t *msg)
 {
 	/* Unsolicited message arrived */
 
-	// Try to get json from cmd
-	// FIXME: null terminate cmd
+	/* XXX A very unfortunate coincidence on binary data can lead to a
+	 * beginning valid json sequence */
+
 	struct json_tokener *tok = json_tokener_new();
-	enum json_tokener_error jerr;
-
 	struct json_object *jo = json_tokener_parse_ex(tok, msg->cmd, msg->len);
-	jerr = json_tokener_get_error(tok);
 
-	if(jerr != json_tokener_success)
+	if(!jo)
 	{
-		fprintf(stderr, "Not json, ignoring tag:%s\n", msg->tag);
-		// Handle errors, as appropriate for your application.
-		return 0;
+		return wa_handle_msg_bin(wa, msg);
 	}
 
-	if(jo)
-		fprintf(stderr, "jo is not NULL\n");
+	if(tok->char_offset != msg->len)
+	{
+		fprintf(stderr, "Partial json detected. char_offset=%d, len=%ld\n",
+				tok->char_offset, msg->len);
 
-	fprintf(stderr, "A json msg was received: %s\n", (char *) msg->cmd);
+		return wa_handle_msg_bin(wa, msg);
+	}
+
+	fprintf(stderr, "JSON RECV: %s\n", ((char *) msg->cmd));
+
+	if(json_object_is_type(jo, json_type_array))
+	{
+		return wa_handle_json_array(wa, jo);
+	}
+
+	fprintf(stderr, "Unknown json msg received\n");
 	return 0;
 }
 
@@ -222,7 +305,7 @@ wa_request(wa_t *wa, msg_t *msg)
 int
 wa_keys_init(wa_t *w)
 {
-	if(generate_keys(&(w->keypair)))
+	if(generate_keys(&w->keypair))
 		return -1;
 
 	w->pubkey = get_public_key(w->keypair);
@@ -235,8 +318,15 @@ wa_keys_init(wa_t *w)
 void
 wa_loop(wa_t *wa)
 {
+	msg_t *msg;
+
 	while(wa->run)
-		dispatch_events(wa->d);
+	{
+		msg = dispatch_wait_event(wa->d, 50);
+		if(!msg) continue;
+
+		wa_handle_msg(wa, msg);
+	}
 
 	dispatch_end(wa->d);
 }

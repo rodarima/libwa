@@ -8,7 +8,7 @@
 
 #include "ws.h"
 
-//#define DEBUG
+#define DEBUG
 
 static int
 ws_recv(ws_t *ws, void *in, size_t len, size_t remaining)
@@ -59,7 +59,7 @@ int
 callback(struct lws* wsi, enum lws_callback_reasons reason, void *user,
 		void* in, size_t len)
 {
-	printf("Callback called. Reason %d\n", reason);
+	//printf("Callback called. Reason %d\n", reason);
 	ws_t *ws = (ws_t *) user;
 	size_t remaining;
 
@@ -78,7 +78,7 @@ callback(struct lws* wsi, enum lws_callback_reasons reason, void *user,
 
 		case LWS_CALLBACK_CLIENT_RECEIVE:
 			remaining = lws_remaining_packet_payload(wsi);
-			printf("RX(%lu)\n", len);
+			//printf("RX(%lu)\n", len);
 			ws_recv(ws, in, len, remaining);
 			break;
 

@@ -36,8 +36,11 @@ typedef struct
 	char *client_id;
 	char *client_token;
 	char *server_token;
+	char *browser_token;
+	char *secret;
 	char *ref;
 	EVP_PKEY *keypair;
+	EVP_PKEY *peer_key;
 	char *pubkey;
 
 	/* Internals */
