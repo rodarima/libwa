@@ -1,6 +1,7 @@
 #include "wa.h"
 
-int main()
+int
+main()
 {
 	wa_t *wa = wa_init();
 	wa_login(wa);
