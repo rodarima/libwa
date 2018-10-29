@@ -33,7 +33,7 @@ generate_client_id()
 		return NULL;
 	}
 
-	client_id = b64_encode(buf, RND_BYTES);
+	client_id = crypto_b64_encode(buf, RND_BYTES);
 
 	return client_id;
 
@@ -188,7 +188,7 @@ wa_handle_msg_bin(wa_t *wa, msg_t *msg)
 }
 
 int
-wa_update_keys(wa_t *wa)
+wa_update_keys(wa_t *wa, char *secret)
 {
 	return 0;
 }
@@ -228,7 +228,6 @@ wa_handle_conn(wa_t *wa, struct json_object *array)
 	assert(secret);
 	wa->secret = strdup(secret);
 
-
 	fprintf(stderr, "---------------- New session ---------------\n");
 	fprintf(stderr, "server_token: %s\n", wa->server_token);
 	fprintf(stderr, "client_token: %s\n", wa->client_token);
@@ -236,7 +235,7 @@ wa_handle_conn(wa_t *wa, struct json_object *array)
 	fprintf(stderr, "secret: %s\n", wa->secret);
 	fprintf(stderr, "--------------------------------------------\n");
 
-	wa_update_keys(wa);
+	crypto_update_secret(wa->c, wa->secret);
 
 	return 0;
 }
@@ -302,19 +301,6 @@ wa_request(wa_t *wa, msg_t *msg)
 	return dispatch_request(wa->d, msg);
 }
 
-int
-wa_keys_init(wa_t *w)
-{
-	if(generate_keys(&w->keypair))
-		return -1;
-
-	w->pubkey = get_public_key(w->keypair);
-	if(!w->pubkey)
-		return -1;
-
-	return 0;
-}
-
 void
 wa_loop(wa_t *wa)
 {
@@ -336,8 +322,8 @@ wa_init()
 {
 	wa_t *wa = calloc(1, sizeof(wa_t));
 	wa->run = 1;
-	wa_keys_init(wa);
 
+	wa->c = crypto_init();
 	wa->d = dispatch_init();
 
 	return wa;
