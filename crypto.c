@@ -270,9 +270,7 @@ int
 update_encryption_keys(crypto_t *c)
 {
 	//EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-	size_t expanded_len = c->expanded_key_len - 64;
-	size_t secret_len = c->secret_len - 64;
-	size_t enc_len = expanded_len + secret_len;
+	size_t enc_len = c->secret_len - 64;
 
 	unsigned char *enc = malloc(enc_len);
 	unsigned char *dec = malloc(enc_len + 32);
@@ -280,11 +278,10 @@ update_encryption_keys(crypto_t *c)
 	unsigned char key[32];
 	unsigned char iv[16];
 
-	memcpy(enc, &c->expanded_key[64], expanded_len);
-	memcpy(&enc[expanded_len], &c->secret[64], secret_len);
-
 	memcpy(key, c->expanded_key, 32);
-	memcpy(iv, enc, 16);
+	memcpy(iv, c->expanded_key + 64, 16);
+
+	memcpy(enc, c->secret + 64, enc_len);
 
 #if DEBUG
 	printf("key:\n");
@@ -297,21 +294,25 @@ update_encryption_keys(crypto_t *c)
 
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 	EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
-	EVP_CipherUpdate(ctx, dec, (int *)&dec_len, enc, enc_len);
-	EVP_CipherFinal_ex(ctx, dec + dec_len, (int *)&final_len);
+	EVP_DecryptUpdate(ctx, dec, (int *)&dec_len, enc, enc_len);
+	printf("dec_len = %ld\n", dec_len);
+	EVP_DecryptFinal_ex(ctx, dec + dec_len, (int *)&final_len);
+
+	printf("final_len = %ld\n", final_len);
+	dec_len += final_len;
 
 #if DEBUG
 	printf("dec_len = %ld, enc_len = %ld\n",
-			dec_len + final_len, enc_len);
+			dec_len, enc_len);
 
 	printf("Decrypted keys:\n");
-	hexdump((char *) dec, dec_len + final_len);
+	hexdump((char *) dec, dec_len);
 #endif
 	char *enc_key = malloc(32);
 	char *mac_key = malloc(32);
 
-	memcpy(enc_key, dec + 16, 32);
-	memcpy(mac_key, dec + 16 + 32, 32);
+	memcpy(enc_key, dec, 32);
+	memcpy(mac_key, dec + 32, 32);
 
 	printf("enc_key:\n");
 	hexdump(enc_key, 32);
