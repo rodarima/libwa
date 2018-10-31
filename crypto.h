@@ -16,6 +16,10 @@ typedef struct {
 
 	char *expanded_key;
 	size_t expanded_key_len;
+
+	/* Both keys are 32 bytes long */
+	char *enc_key;
+	char *mac_key;
 } crypto_t;
 
 

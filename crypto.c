@@ -199,8 +199,10 @@ derive_shared_key(crypto_t *c, EVP_PKEY *peer_key)
 	c->shared_key = (char *) skey;
 	c->shared_key_len = skeylen;
 
+#if DEBUG
 	printf("Shared key:\n");
 	hexdump(c->shared_key, c->shared_key_len);
+#endif
 
 	return 0;
 }
@@ -222,8 +224,11 @@ expand_shared_key(crypto_t *c)
 	c->expanded_key = out;
 	c->expanded_key_len = outlen;
 
+#if DEBUG
 	printf("Expanded key:\n");
 	hexdump(out, outlen);
+#endif
+
 	return 0;
 }
 
@@ -246,11 +251,12 @@ verify_expanded_key(crypto_t *c)
 			(unsigned char *)enc, enc_len,
 			(unsigned char *)md, &md_len);
 
+#if DEBUG
 	printf("Computed HMAC:\n");
 	hexdump(md, 32);
 	printf("Expected HMAC:\n");
 	hexdump(sum, 32);
-
+#endif
 	cmp = memcmp(md, sum, 32);
 
 	free(enc);
@@ -265,12 +271,14 @@ update_encryption_keys(crypto_t *c)
 {
 	//EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 	size_t expanded_len = c->expanded_key_len - 64;
-	size_t secret_len = c->expanded_key_len - 64;
+	size_t secret_len = c->secret_len - 64;
 	size_t enc_len = expanded_len + secret_len;
 
-	char *enc = malloc(enc_len);
-	char key[32];
-	char iv[16];
+	unsigned char *enc = malloc(enc_len);
+	unsigned char *dec = malloc(enc_len + 32);
+	size_t dec_len = 0, final_len = 0;
+	unsigned char key[32];
+	unsigned char iv[16];
 
 	memcpy(enc, &c->expanded_key[64], expanded_len);
 	memcpy(&enc[expanded_len], &c->secret[64], secret_len);
@@ -278,10 +286,40 @@ update_encryption_keys(crypto_t *c)
 	memcpy(key, c->expanded_key, 32);
 	memcpy(iv, enc, 16);
 
-	// TODO: Decrypt the keys stored in enc
-	//EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
-	//EVP_CipherUpdate(ctx, outbuf, &outlen, inbuf, inlen);
-	//EVP_CipherFinal_ex(ctx, outbuf, &outlen);
+#if DEBUG
+	printf("key:\n");
+	hexdump((char *)key, 32);
+	printf("iv:\n");
+	hexdump((char *)iv, 16);
+	printf("encrypted data:\n");
+	hexdump((char*)enc, enc_len);
+#endif
+
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
+	EVP_CipherUpdate(ctx, dec, (int *)&dec_len, enc, enc_len);
+	EVP_CipherFinal_ex(ctx, dec + dec_len, (int *)&final_len);
+
+#if DEBUG
+	printf("dec_len = %ld, enc_len = %ld\n",
+			dec_len + final_len, enc_len);
+
+	printf("Decrypted keys:\n");
+	hexdump((char *) dec, dec_len + final_len);
+#endif
+	char *enc_key = malloc(32);
+	char *mac_key = malloc(32);
+
+	memcpy(enc_key, dec + 16, 32);
+	memcpy(mac_key, dec + 16 + 32, 32);
+
+	printf("enc_key:\n");
+	hexdump(enc_key, 32);
+	printf("mac_key:\n");
+	hexdump(mac_key, 32);
+
+	c->enc_key = enc_key;
+	c->mac_key = mac_key;
 
 	return 0;
 }
@@ -308,7 +346,7 @@ crypto_update_secret(crypto_t *c, const char *b64_secret)
 
 	expand_shared_key(c);
 
-	if(!verify_expanded_key(c))
+	if(verify_expanded_key(c))
 		return 1;
 
 	update_encryption_keys(c);
