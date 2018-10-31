@@ -7,10 +7,13 @@
 #include <openssl/bio.h>
 #include <openssl/kdf.h>
 #include <openssl/hmac.h>
+#include <ctype.h>
 
 #include "crypto.h"
+#include "msg.h"
 
-#define DEBUG 1
+
+//#define DEBUG 1
 
 /* WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
  * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
@@ -30,18 +33,31 @@
 void
 hexdump(char *buf, size_t len)
 {
-	int i;
-	for(i=0; i<len; i++)
+	int i,j;
+	for(i=0; i< 1 + (len-1)/16; i++)
 	{
-		printf("%02X ", (unsigned char) buf[i]);
+		for(j=0; j<16; j++)
+		{
+			int p = i*16 + j;
+			if(p < len)
+				printf("%02X ", (unsigned char) buf[p]);
+			else
+				printf("   ");
 
-		if((i % 16) == 15)
-			printf("\n");
-
-		if((i % 16) == 7)
-			printf(" ");
+			if(j == 7)
+				printf(" ");
+		}
+		printf("  ");
+		for(j=0; j<16; j++)
+		{
+			int p = i*16 + j;
+			if((p < len) && (isprint(buf[p])))
+				printf("%c", buf[p]);
+			else
+				printf(".");
+		}
+		printf("\n");
 	}
-	printf("\n");
 }
 
 size_t
@@ -166,12 +182,12 @@ crypto_init()
 }
 
 char *
-get_public_key(EVP_PKEY *pkey)
+crypto_get_public_key(crypto_t *c)
 {
 	unsigned char *pub_key_buf;
 	int len;
 
-	len = EVP_PKEY_get1_tls_encodedpoint(pkey, &pub_key_buf);
+	len = EVP_PKEY_get1_tls_encodedpoint(c->client_key, &pub_key_buf);
 
 	if (len != 32)
 		return NULL;
@@ -319,8 +335,8 @@ update_encryption_keys(crypto_t *c)
 	printf("mac_key:\n");
 	hexdump(mac_key, 32);
 
-	c->enc_key = enc_key;
-	c->mac_key = mac_key;
+	c->enc_key = (unsigned char *) enc_key;
+	c->mac_key = (unsigned char *) mac_key;
 
 	return 0;
 }
@@ -353,6 +369,31 @@ crypto_update_secret(crypto_t *c, const char *b64_secret)
 	update_encryption_keys(c);
 
 	return 0;
+}
+
+msg_t *
+crypto_decrypt_msg(crypto_t *c, msg_t *msg)
+{
+	unsigned char *hmac_sum = msg->cmd;
+	unsigned char *iv = msg->cmd + 32;
+	unsigned char *enc_msg = msg->cmd + 32 + 16;
+
+	int enc_msg_len = msg->len - (32 + 16);
+	int dec_msg_len = enc_msg_len + 32;
+	int final_len = 0;
+	unsigned char *dec_msg = malloc(dec_msg_len);
+
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, c->enc_key, iv);
+	EVP_DecryptUpdate(ctx, dec_msg, &dec_msg_len, enc_msg, enc_msg_len);
+	EVP_DecryptFinal_ex(ctx, dec_msg + dec_msg_len, &final_len);
+	dec_msg_len += final_len;
+
+	printf("MSG DECRYPTED:\n");
+	hexdump((char *)dec_msg, dec_msg_len);
+	printf("HMAC sum\n");
+	hexdump((char *)hmac_sum, 32);
+	return NULL;
 }
 
 /*

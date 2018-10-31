@@ -23,4 +23,12 @@ plugin to add WhatsApp as an available protocol to IRC.
 ### Current status
 
 By now it can only connect to the WhatsApp websocket server, login using the QR
-and start receiving messages.
+and start receiving messages. The encrypted messages are succesfully decrypted.
+
+	F8 04 09 0A 4B F8 01 F8  02 34 FC 5B 0A 40 0A 1A   ....K....4.[.@..
+	33 34 36 36 36 36 36 36  36 36 36 40 73 2E 77 68   34666666666@s.wh
+	61 74 73 61 70 70 2E 6E  65 74 10 01 1A 20 42 42   atsapp.net... BB
+	30 30 30 30 30 30 30 30  30 30 30 30 30 30 30 30   0000000000000000
+	30 30 30 30 30 30 30 30  30 30 30 30 30 30 12 0F   00000000000000..
+	0A 0D 54 65 73 74 69 6E  67 20 6C 69 62 77 61 18   ..Testing libwa.
+	A8 85 E7 DE 05 20 00                               ..... ..........

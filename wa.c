@@ -8,7 +8,7 @@
 #include <uthash.h>
 #include <assert.h>
 
-#define WA_WEB_VERSION "[0,3,557]"
+#define WA_WEB_VERSION "[0,3,1242]"
 #define WA_WEB_CLIENT "[\"libwa\",\"Chromium\"]"
 
 #include "wa.h"
@@ -45,8 +45,9 @@ generate_QR(wa_t *wa)
 {
 	char buf[1024];
 	int len;
+	char *pubkey = crypto_get_public_key(wa->c);
 
-	len = snprintf(buf, 1024, "%s,%s,%s", wa->ref, wa->pubkey, wa->client_id);
+	len = snprintf(buf, 1024, "%s,%s,%s", wa->ref, pubkey, wa->client_id);
 	if (len >= 1024)
 		return -1;
 
@@ -184,6 +185,7 @@ wa_handle_msg_bin(wa_t *wa, msg_t *msg)
 {
 	/* Ignore by now */
 	fprintf(stderr, "RECV BIN: tag:%s len:%lu\n", msg->tag, msg->len);
+	crypto_decrypt_msg(wa->c, msg);
 	return 0;
 }
 

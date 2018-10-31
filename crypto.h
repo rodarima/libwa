@@ -2,6 +2,7 @@
 #define _CRYPTO_H_
 
 #include <openssl/evp.h>
+#include "msg.h"
 
 typedef struct {
 	EVP_PKEY *client_key;
@@ -18,8 +19,8 @@ typedef struct {
 	size_t expanded_key_len;
 
 	/* Both keys are 32 bytes long */
-	char *enc_key;
-	char *mac_key;
+	unsigned char *enc_key;
+	unsigned char *mac_key;
 } crypto_t;
 
 
@@ -34,5 +35,11 @@ crypto_b64_decode(const char *str, char **ptrbuf, size_t *ptrlen);
 
 int
 crypto_update_secret(crypto_t *c, const char *b64_secret);
+
+msg_t *
+crypto_decrypt_msg(crypto_t *c, msg_t *msg);
+
+char *
+crypto_get_public_key(crypto_t *c);
 
 #endif

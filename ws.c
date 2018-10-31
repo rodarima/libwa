@@ -8,7 +8,7 @@
 
 #include "ws.h"
 
-#define DEBUG
+//#define DEBUG
 
 static int
 ws_recv(ws_t *ws, void *in, size_t len, size_t remaining)
