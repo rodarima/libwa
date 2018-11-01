@@ -15,8 +15,7 @@
 #include "wa.h"
 #include "crypto.h"
 #include "bnode.h"
-
-
+#include "log.h"
 
 void qr_encode(char *s);
 
@@ -53,7 +52,7 @@ generate_QR(wa_t *wa)
 		return -1;
 
 	qr_encode(buf);
-	printf("QR: %s\n", buf);
+	LOG_INFO("QR: %s\n", buf);
 
 	return 0;
 }
@@ -71,7 +70,7 @@ wa_action_init(wa_t *wa)
 
 	if(!wa->client_id)
 	{
-		fprintf(stderr, "client_id is missing\n");
+		LOG_ERR("client_id is missing\n");
 		return -1;
 	}
 
@@ -84,7 +83,7 @@ wa_action_init(wa_t *wa)
 
 	if (len >= BUFSIZE)
 	{
-		fprintf(stderr, "BUFSIZE too small, aborting\n");
+		LOG_ERR("BUFSIZE too small, aborting\n");
 		return -1;
 	}
 
@@ -93,7 +92,7 @@ wa_action_init(wa_t *wa)
 
 	res = wa_request(wa, msg);
 
-	fprintf(stderr, "Received cmd:%s\n", (char *) res->cmd);
+	LOG_INFO("Received cmd:%s\n", (char *) res->cmd);
 
 	/* FIXME: The response is NOT null terminated, so the tokenizer reads
 	 * outside the buffer */
@@ -112,7 +111,7 @@ wa_action_init(wa_t *wa)
 
 	//json_object_put(jref);
 
-	printf("Got ref:%s\n", ref);
+	LOG_INFO("Got ref:%s\n", ref);
 	wa->ref = strdup(ref);
 
 	json_object_put(jo);
@@ -161,7 +160,7 @@ wa_login(wa_t *wa)
 	wa->client_id = generate_client_id(wa);
 	if(wa_action_init(wa))
 	{
-		fprintf(stderr, "%s: init failed, aborting login\n",
+		LOG_ERR("%s: init failed, aborting login\n",
 			       __func__);
 
 		return -1;
@@ -169,14 +168,14 @@ wa_login(wa_t *wa)
 
 	if(wa_restore_session(wa))
 	{
-		fprintf(stderr, "%s: requesting a new session\n",
+		LOG_ERR("%s: requesting a new session\n",
 			       __func__);
 
 		wa_new_session(wa);
 	}
 
 
-	fprintf(stderr, "%s: logged in\n", __func__);
+	LOG_INFO("%s: logged in\n", __func__);
 
 	return 0;
 }
@@ -186,9 +185,9 @@ wa_handle_msg_bin(wa_t *wa, msg_t *msg)
 {
 	msg_t *dec;
 
-	fprintf(stderr, "RECV BIN: tag:%s len:%lu\n", msg->tag, msg->len);
-	hexdump(msg->cmd, msg->len);
-	fprintf(stderr, "Trying to decrypt...\n");
+	LOG_INFO("RECV BIN: tag:%s len:%lu\n", msg->tag, msg->len);
+	//hexdump(msg->cmd, msg->len);
+	LOG_INFO("Trying to decrypt...\n");
 	dec = crypto_decrypt_msg(wa->c, msg);
 	bnode_print_msg(dec);
 	return 0;
@@ -235,14 +234,16 @@ wa_handle_conn(wa_t *wa, struct json_object *array)
 	assert(secret);
 	wa->secret = strdup(secret);
 
-	fprintf(stderr, "---------------- New session ---------------\n");
-	fprintf(stderr, "server_token: %s\n", wa->server_token);
-	fprintf(stderr, "client_token: %s\n", wa->client_token);
-	fprintf(stderr, "browser_token: %s\n", wa->browser_token);
-	fprintf(stderr, "secret: %s\n", wa->secret);
-	fprintf(stderr, "--------------------------------------------\n");
+	LOG_INFO("---------------- New session ---------------\n");
+	LOG_INFO("server_token: %s\n", wa->server_token);
+	LOG_INFO("client_token: %s\n", wa->client_token);
+	LOG_INFO("browser_token: %s\n", wa->browser_token);
+	LOG_INFO("secret: %s\n", wa->secret);
+	LOG_INFO("--------------------------------------------\n");
 
 	crypto_update_secret(wa->c, wa->secret);
+
+	wa->state = WA_STATE_LOGGED_IN;
 
 	return 0;
 }
@@ -259,7 +260,17 @@ wa_handle_json_array(wa_t *wa, struct json_object *array)
 	assert(action);
 
 	if(strcmp(action, "Conn") == 0)
-		return wa_handle_conn(wa, array);
+	{
+		if(wa->state == WA_STATE_LOGGING)
+		{
+			return wa_handle_conn(wa, array);
+		}
+		else
+		{
+			LOG_INFO("Discarding conn msg, already logged in\n");
+			return 0;
+		}
+	}
 
 	return 0;
 }
@@ -282,27 +293,27 @@ wa_handle_msg(wa_t *wa, msg_t *msg)
 
 	if(tok->char_offset != msg->len)
 	{
-		fprintf(stderr, "Partial json detected. char_offset=%d, len=%ld\n",
+		LOG_INFO("Partial json detected. char_offset=%d, len=%ld\n",
 				tok->char_offset, msg->len);
 
 		return wa_handle_msg_bin(wa, msg);
 	}
 
-	fprintf(stderr, "JSON RECV: %s\n", ((char *) msg->cmd));
+	LOG_INFO("JSON RECV: %s\n", ((char *) msg->cmd));
 
 	if(json_object_is_type(jo, json_type_array))
 	{
 		return wa_handle_json_array(wa, jo);
 	}
 
-	fprintf(stderr, "Unknown json msg received\n");
+	LOG_ERR("Unknown json msg received\n");
 	return 0;
 }
 
 msg_t *
 wa_request(wa_t *wa, msg_t *msg)
 {
-	fprintf(stderr, "Sending msg:\n\ttag:%s\n\tcmd:%s\n",
+	LOG_INFO("Sending msg:\n\ttag:%s\n\tcmd:%s\n",
 		       msg->tag, (char *) msg->cmd);
 
 	return dispatch_request(wa->d, msg);
@@ -329,6 +340,7 @@ wa_init()
 {
 	wa_t *wa = calloc(1, sizeof(wa_t));
 	wa->run = 1;
+	wa->state = WA_STATE_LOGGING;
 
 	wa->c = crypto_init();
 	wa->d = dispatch_init();

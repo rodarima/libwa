@@ -5,12 +5,12 @@
 #include "bnode.h"
 #include "msg.h"
 #include "crypto.h"
-
-#define DEBUG
-
-#ifdef DEBUG
+#include "pmsg.h"
 #include "test/msg.h"
-#endif
+
+//#define DEBUG
+
+#include "log.h"
 
 enum tag_t
 {
@@ -114,7 +114,7 @@ read_int(parser_t *p, size_t len)
 	assert(p->ptr + len <= p->end);
 
 	v = p->ptr[0];
-	printf("v=%02X (%d) len=%ld\n", v, v, len);
+	LOG_INFO("v=%02X (%d) len=%ld\n", v, v, len);
 
 	for(i=1; i < len; i++)
 	{
@@ -139,7 +139,7 @@ list_size(parser_t *p, int tag)
 		case TAG_LIST_16:
 			return read_int(p, 2);
 		default:
-			fprintf(stderr, "Invalid tag %d for list at %p\n",
+			LOG_ERR("Invalid tag %d for list at %p\n",
 					tag, p->ptr);
 			return -1;
 	}
@@ -151,7 +151,7 @@ list_size(parser_t *p, int tag)
 char *
 read_bytes(parser_t *p, int len)
 {
-	printf("len = %d\n", len);
+	LOG_INFO("len = %d\n", len);
 	assert(p->ptr + len <= p->end);
 
 	char *s = malloc(len + 1);
@@ -257,7 +257,7 @@ read_string(parser_t *p, int tag)
 	 */
 
 	if((tag >= 3) && (tag <= 235))
-		return token_table[tag];
+		return strdup(token_table[tag]);
 
 	switch(tag)
 	{
@@ -314,11 +314,11 @@ read_attr(parser_t *p, int len)
 
 	for(i=0; i<len; i++)
 	{
-		printf("--- New attr ---\n");
+		LOG_INFO("--- New attr ---\n");
 		key = read_string(p, read_int(p, 1));
-		printf("key = %s\n", key);
+		LOG_INFO("key = %s\n", key);
 		val = read_string(p, read_int(p, 1));
-		printf("attr %s : %s\n", key, val);
+		LOG_INFO("attr %s : %s\n", key, val);
 		val_json = json_object_new_string(val);
 		json_object_object_add(obj, key, val_json);
 	}
@@ -387,6 +387,8 @@ bnode_binary(parser_t *p, bnode_t *bn, int tag)
 	bn->type = BNODE_BINARY;
 	bn->data.bytes = read_bytes(p, len);
 
+	pmsg_unpack(bn->data.bytes, bn->len);
+
 	return 0;
 }
 
@@ -417,24 +419,24 @@ parse_content(parser_t *p, bnode_t *bn, int tag)
 		case TAG_BINARY_8:
 		case TAG_BINARY_20:
 		case TAG_BINARY_32:
-			printf("BNODE BINARY\n");
+			LOG_INFO("BNODE BINARY\n");
 			return bnode_binary(p, bn, tag);
 		case TAG_LIST_EMPTY:
 		case TAG_LIST_8:
 		case TAG_LIST_16:
-			printf("BNODE LIST\n");
+			LOG_INFO("BNODE LIST\n");
 			return bnode_list(p, bn, tag);
 		case TAG_JID_PAIR:
-			printf("BNODE JID\n");
+			LOG_INFO("BNODE JID\n");
 			return bnode_jid_pair(p, bn);
 		case TAG_NIBBLE_8:
-			printf("BNODE NIBBLE\n");
+			LOG_INFO("BNODE NIBBLE\n");
 			return bnode_nibbles(p, bn);
 		case TAG_HEX_8:
-			printf("BNODE HEX\n");
+			LOG_INFO("BNODE HEX\n");
 			return bnode_hex(p, bn);
 		default:
-			fprintf(stderr, "Unknown content tag %d\n", tag);
+			LOG_ERR("Unknown content tag %d\n", tag);
 			return -1;
 	}
 
@@ -454,20 +456,20 @@ read_bnode(parser_t *p)
 	bn->type = BNODE_EMPTY;
 
 	tag = read_int(p, 1);
-	printf("TAG:%d\n", tag);
+	LOG_INFO("TAG:%d\n", tag);
 	size = list_size(p, tag);
-	printf("SIZE:%d\n", size);
+	LOG_INFO("SIZE:%d\n", size);
 	desc_tag = read_int(p, 1);
 
 	if(desc_tag == TAG_STREAM_END)
 		return NULL;
 
 	bn->desc = read_string(p, desc_tag);
-	printf("DESC:%s\n", bn->desc);
+	LOG_INFO("DESC:%s\n", bn->desc);
 
 	attr_len = (size - 1) / 2;
 
-	printf("size=%d, attr_len=%d\n", size, attr_len);
+	LOG_INFO("size=%d, attr_len=%d\n", size, attr_len);
 
 	bn->attr = read_attr(p, attr_len);
 
@@ -490,7 +492,7 @@ msg_to_bnode(msg_t *msg)
 	p->start = msg->cmd;
 	p->ptr = p->start;
 	p->end = p->start + msg->len;
-	printf("msg len:%ld\n", msg->len);
+	LOG_INFO("msg len:%ld\n", msg->len);
 
 	bn = read_bnode(p);
 	return bn;
@@ -501,32 +503,34 @@ bnode_print(bnode_t *bn)
 {
 	int i;
 
-	printf("desc:%s\n", bn->desc);
-	printf("type:%d\n", bn->type);
+	LOG_INFO("desc:%s\n", bn->desc);
+	LOG_INFO("type:%d\n", bn->type);
 
 	/* Print attrs here */
 
 	switch(bn->type)
 	{
 		case BNODE_EMPTY:
-			printf("content: empty\n");
+			LOG_INFO("content: empty\n");
 			break;
 		case BNODE_STRING:
-			printf("content: %s\n", bn->data.str);
+			LOG_INFO("content: %s\n", bn->data.str);
 			break;
 		case BNODE_LIST:
-			printf("content: list:\n");
+			LOG_INFO("content: list:\n");
 			for(i=0; i < bn->len; i++)
 			{
 				bnode_print(bn->data.list[i]);
 			}
 			break;
 		case BNODE_BINARY:
-			printf("content: binary:\n");
+			LOG_INFO("content: binary:\n");
+#ifdef DEBUG
 			hexdump(bn->data.bytes, bn->len);
+#endif
 			break;
 		default:
-			fprintf(stderr, "Unknown bnode type %d\n", bn->type);
+			LOG_ERR("Unknown bnode type %d\n", bn->type);
 			return -1;
 	}
 
@@ -545,8 +549,8 @@ bnode_print_msg(msg_t *msg)
 //main()
 //{
 //	msg_t *msg = malloc(sizeof(msg_t));
-//	msg->cmd = msg1;
-//	msg->len = msg1_len;
+//	msg->cmd = msg2;
+//	msg->len = msg2_len;
 //
 //	bnode_print_msg(msg);
 //

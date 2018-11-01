@@ -12,8 +12,9 @@
 #include "crypto.h"
 #include "msg.h"
 
-
 //#define DEBUG 1
+
+#include "log.h"
 
 /* WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
  * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
@@ -29,6 +30,7 @@
  * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
  * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
  * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING */
+
 
 void
 hexdump(char *buf, size_t len)
@@ -51,14 +53,27 @@ hexdump(char *buf, size_t len)
 		for(j=0; j<16; j++)
 		{
 			int p = i*16 + j;
-			if((p < len) && (isprint(buf[p])))
-				printf("%c", buf[p]);
+			if(p < len)
+			{
+				if(isprint(buf[p]))
+					printf("%c", buf[p]);
+				else
+					printf(".");
+			}
 			else
-				printf(".");
+			{
+				break;
+			}
 		}
 		printf("\n");
 	}
 }
+
+#ifdef DEBUG
+#define LOG_HEXDUMP(buf, len) hexdump(buf, len)
+#else
+#define LOG_HEXDUMP(buf, len)
+#endif
 
 size_t
 b64_decode_len(const char *str)
@@ -149,16 +164,16 @@ crypto_init()
 	c->client_key = EVP_PKEY_new_raw_private_key(
 			EVP_PKEY_X25519, NULL, (unsigned char *)priv_key, 32);
 
-	printf("Private key:\n");
-	hexdump(priv_key, 32);
+	LOG_INFO("Private key:\n");
+	LOG_HEXDUMP(priv_key, 32);
 
 	char *pub_key_buf;
 	int len;
 
 	len = EVP_PKEY_get1_tls_encodedpoint(c->client_key, (unsigned char **)&pub_key_buf);
 
-	printf("Public key:\n");
-	hexdump(pub_key_buf, len);
+	LOG_INFO("Public key:\n");
+	LOG_HEXDUMP(pub_key_buf, len);
 
 #else
 
@@ -216,8 +231,8 @@ derive_shared_key(crypto_t *c, EVP_PKEY *peer_key)
 	c->shared_key_len = skeylen;
 
 #if DEBUG
-	printf("Shared key:\n");
-	hexdump(c->shared_key, c->shared_key_len);
+	LOG_INFO("Shared key:\n");
+	LOG_HEXDUMP(c->shared_key, c->shared_key_len);
 #endif
 
 	return 0;
@@ -241,8 +256,8 @@ expand_shared_key(crypto_t *c)
 	c->expanded_key_len = outlen;
 
 #if DEBUG
-	printf("Expanded key:\n");
-	hexdump(out, outlen);
+	LOG_INFO("Expanded key:\n");
+	LOG_HEXDUMP(out, outlen);
 #endif
 
 	return 0;
@@ -268,10 +283,10 @@ verify_expanded_key(crypto_t *c)
 			(unsigned char *)md, &md_len);
 
 #if DEBUG
-	printf("Computed HMAC:\n");
-	hexdump(md, 32);
-	printf("Expected HMAC:\n");
-	hexdump(sum, 32);
+	LOG_INFO("Computed HMAC:\n");
+	LOG_HEXDUMP(md, 32);
+	LOG_INFO("Expected HMAC:\n");
+	LOG_HEXDUMP(sum, 32);
 #endif
 	cmp = memcmp(md, sum, 32);
 
@@ -300,29 +315,29 @@ update_encryption_keys(crypto_t *c)
 	memcpy(enc, c->secret + 64, enc_len);
 
 #if DEBUG
-	printf("key:\n");
-	hexdump((char *)key, 32);
-	printf("iv:\n");
-	hexdump((char *)iv, 16);
-	printf("encrypted data:\n");
-	hexdump((char*)enc, enc_len);
+	LOG_INFO("key:\n");
+	LOG_HEXDUMP((char *)key, 32);
+	LOG_INFO("iv:\n");
+	LOG_HEXDUMP((char *)iv, 16);
+	LOG_INFO("encrypted data:\n");
+	LOG_HEXDUMP((char*)enc, enc_len);
 #endif
 
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 	EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
 	EVP_DecryptUpdate(ctx, dec, (int *)&dec_len, enc, enc_len);
-	printf("dec_len = %ld\n", dec_len);
+	LOG_INFO("dec_len = %ld\n", dec_len);
 	EVP_DecryptFinal_ex(ctx, dec + dec_len, (int *)&final_len);
 
-	printf("final_len = %ld\n", final_len);
+	LOG_INFO("final_len = %ld\n", final_len);
 	dec_len += final_len;
 
 #if DEBUG
-	printf("dec_len = %ld, enc_len = %ld\n",
+	LOG_INFO("dec_len = %ld, enc_len = %ld\n",
 			dec_len, enc_len);
 
-	printf("Decrypted keys:\n");
-	hexdump((char *) dec, dec_len);
+	LOG_INFO("Decrypted keys:\n");
+	LOG_HEXDUMP((char *) dec, dec_len);
 #endif
 	char *enc_key = malloc(32);
 	char *mac_key = malloc(32);
@@ -330,10 +345,10 @@ update_encryption_keys(crypto_t *c)
 	memcpy(enc_key, dec, 32);
 	memcpy(mac_key, dec + 32, 32);
 
-	printf("enc_key:\n");
-	hexdump(enc_key, 32);
-	printf("mac_key:\n");
-	hexdump(mac_key, 32);
+	LOG_INFO("enc_key:\n");
+	LOG_HEXDUMP(enc_key, 32);
+	LOG_INFO("mac_key:\n");
+	LOG_HEXDUMP(mac_key, 32);
 
 	c->enc_key = (unsigned char *) enc_key;
 	c->mac_key = (unsigned char *) mac_key;
@@ -348,13 +363,13 @@ crypto_update_secret(crypto_t *c, const char *b64_secret)
 
 	assert(c->secret_len == 144);
 
-	printf("Secret:\n");
-	hexdump(c->secret, c->secret_len);
+	LOG_INFO("Secret:\n");
+	LOG_HEXDUMP(c->secret, c->secret_len);
 
 	EVP_PKEY *peer_key;
 
-	printf("Peer public key:\n");
-	hexdump(c->secret, 32);
+	LOG_INFO("Peer public key:\n");
+	LOG_HEXDUMP(c->secret, 32);
 
 	peer_key = EVP_PKEY_new_raw_public_key(
 			EVP_PKEY_X25519, NULL, (unsigned char *)c->secret, 32);
@@ -374,7 +389,7 @@ crypto_update_secret(crypto_t *c, const char *b64_secret)
 msg_t *
 crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 {
-	unsigned char *hmac_sum = msg->cmd;
+	/*unsigned char *hmac_sum = msg->cmd;*/
 	unsigned char *iv = msg->cmd + 32;
 	unsigned char *enc_msg = msg->cmd + 32 + 16;
 
@@ -389,10 +404,14 @@ crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 	EVP_DecryptFinal_ex(ctx, dec_msg + dec_msg_len, &final_len);
 	dec_msg_len += final_len;
 
-	printf("MSG DECRYPTED:\n");
-	hexdump((char *)dec_msg, dec_msg_len);
-	printf("HMAC sum\n");
-	hexdump((char *)hmac_sum, 32);
+	LOG_INFO("MSG DECRYPTED:\n");
+	LOG_HEXDUMP((char *)dec_msg, dec_msg_len);
+	/*
+	 * TODO: Verify msg with HMAC
+	 *
+	 * LOG_INFO("HMAC sum\n");
+	 * LOG_HEXDUMP((char *)hmac_sum, 32);
+	*/
 
 	msg_t *dmsg = malloc(sizeof(msg_t));
 	dmsg->tag = strdup(msg->tag);
@@ -411,8 +430,8 @@ main()
 
 	crypto_b64_decode("Y2FjYWh1ZXRpbGxvAA==", &buf, &len);
 
-	printf("%s\n", buf);
-	hexdump(buf, len);
+	LOG_INFO("%s\n", buf);
+	LOG_HEXDUMP(buf, len);
 }
 */
 
@@ -430,10 +449,10 @@ int main()
 
 	int i;
 	for(i=0; i<32; i++)
-		printf("%02X ", pub_key_buf[i]);
-	printf("\n");
+		LOG_INFO("%02X ", pub_key_buf[i]);
+	LOG_INFO("\n");
 
-	printf("%s\n", b64_encode(pub_key_buf, 32));
+	LOG_INFO("%s\n", b64_encode(pub_key_buf, 32));
 
 	return 0;
 }

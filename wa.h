@@ -11,6 +11,9 @@
 
 #define MAX_QUEUE 10
 
+#define WA_STATE_LOGGING	0
+#define WA_STATE_LOGGED_IN	1
+
 typedef struct
 {
 	/* Session */
@@ -26,6 +29,7 @@ typedef struct
 
 	/* Internals */
 	int run;
+	int state;
 	dispatcher_t *d;
 	ws_t *ws;
 	crypto_t *c;

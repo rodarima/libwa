@@ -5,12 +5,12 @@ all: wac
 
 test: wa.o test.c
 
-wac: dispatcher.c wa.o ws.o qr.o crypto.o bnode.o
+wac: dispatcher.c wa.o ws.o qr.o crypto.o bnode.o pmsg.o pmsg.pb-c.o
 
-bnode: crypto.o
+bnode: crypto.o pmsg.o pmsg.pb-c.o
 
-def.pb-c.c: def.proto
-	protoc --c_out=. def.proto
+pmsg.pb-c.c: pmsg.proto
+	protoc-c --c_out=. pmsg.proto
 
 clean:
-	rm -rf *.o def.pb-c.* wac
+	rm -rf *.o pmsg.pb-c.* wac
