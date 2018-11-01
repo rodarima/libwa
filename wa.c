@@ -7,15 +7,16 @@
 #include <libwebsockets.h>
 #include <uthash.h>
 #include <assert.h>
+#include <json-c/json.h>
 
 #define WA_WEB_VERSION "[0,3,1242]"
 #define WA_WEB_CLIENT "[\"libwa\",\"Chromium\"]"
 
 #include "wa.h"
 #include "crypto.h"
+#include "bnode.h"
 
 
-#include <json-c/json.h>
 
 void qr_encode(char *s);
 
@@ -183,9 +184,13 @@ wa_login(wa_t *wa)
 int
 wa_handle_msg_bin(wa_t *wa, msg_t *msg)
 {
-	/* Ignore by now */
+	msg_t *dec;
+
 	fprintf(stderr, "RECV BIN: tag:%s len:%lu\n", msg->tag, msg->len);
-	crypto_decrypt_msg(wa->c, msg);
+	hexdump(msg->cmd, msg->len);
+	fprintf(stderr, "Trying to decrypt...\n");
+	dec = crypto_decrypt_msg(wa->c, msg);
+	bnode_print_msg(dec);
 	return 0;
 }
 

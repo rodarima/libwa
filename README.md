@@ -9,6 +9,7 @@ Uses the following libraries:
 - libqrencode
 - libcrypto
 - libjson-c
+- libprotobuf-c
 
 Still under HEAVY development. Pull requests are appreciated.
 

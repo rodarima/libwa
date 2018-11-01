@@ -42,4 +42,7 @@ crypto_decrypt_msg(crypto_t *c, msg_t *msg);
 char *
 crypto_get_public_key(crypto_t *c);
 
+void
+hexdump(char *buf, size_t len);
+
 #endif

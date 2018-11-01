@@ -393,7 +393,13 @@ crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 	hexdump((char *)dec_msg, dec_msg_len);
 	printf("HMAC sum\n");
 	hexdump((char *)hmac_sum, 32);
-	return NULL;
+
+	msg_t *dmsg = malloc(sizeof(msg_t));
+	dmsg->tag = strdup(msg->tag);
+	dmsg->cmd = dec_msg;
+	dmsg->len = dec_msg_len;
+
+	return dmsg;
 }
 
 /*
