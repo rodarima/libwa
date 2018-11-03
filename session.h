@@ -27,6 +27,9 @@ typedef struct {
 	int (*priv_msg_cb)(void *, priv_msg_t *);
 	void *priv_msg_ptr;
 
+	int (*update_user_cb)(void *, user_t *);
+	void *update_user_ptr;
+
 } session_t;
 
 session_t *
@@ -35,6 +38,10 @@ session_init();
 int
 session_cb_priv_msg(session_t *s, void *priv_msg_ptr,
 		int (*priv_msg_cb)(void *, priv_msg_t *));
+
+int
+session_cb_update_user(session_t *s, void *update_user_ptr,
+		int (*update_user_cb)(void *, user_t *));
 
 
 int

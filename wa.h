@@ -48,4 +48,8 @@ int
 wa_cb_priv_msg(wa_t *wa, void *priv_msg_ptr,
 		int (*priv_msg_cb)(void *, priv_msg_t *));
 
+int
+wa_cb_update_user(wa_t *wa, void *update_user_ptr,
+		int (*update_user_cb)(void *, user_t *));
+
 #endif

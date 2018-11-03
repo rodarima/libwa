@@ -16,6 +16,9 @@
 #include "crypto.h"
 #include "bnode.h"
 #include "session.h"
+
+#define DEBUG LOG_LEVEL_WARN
+
 #include "log.h"
 
 void qr_encode(char *s);
@@ -302,7 +305,7 @@ wa_handle_msg(wa_t *wa, msg_t *msg)
 		return wa_handle_msg_bin(wa, msg);
 	}
 
-	LOG_INFO("JSON RECV: %s\n", ((char *) msg->cmd));
+	LOG_WARN("JSON RECV: %s\n", ((char *) msg->cmd));
 
 	if(json_object_is_type(jo, json_type_array))
 	{
@@ -352,10 +355,20 @@ wa_init()
 	return wa;
 }
 
+/* Use a struct with all the callbacks */
+
 /* Ugly */
 int
 wa_cb_priv_msg(wa_t *wa, void *priv_msg_ptr,
 		int (*priv_msg_cb)(void *, priv_msg_t *))
 {
 	return session_cb_priv_msg(wa->s, priv_msg_ptr, priv_msg_cb);
+}
+
+/* Ugly */
+int
+wa_cb_update_user(wa_t *wa, void *update_user_ptr,
+		int (*update_user_cb)(void *, user_t *))
+{
+	return session_cb_update_user(wa->s, update_user_ptr, update_user_cb);
 }

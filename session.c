@@ -42,14 +42,21 @@ session_update_user(session_t *s, user_t *u)
 
 		free(f->name);
 		free(f->notify);
+		free(f->jid);
+
 		f->name = u->name;
 		f->notify = u->notify;
-
-		return 0;
+		f->jid = u->jid;
+	}
+	else
+	{
+		HASH_ADD_KEYPTR(hh, s->users, u->jid, strlen(u->jid), u);
 	}
 
-
-	HASH_ADD_KEYPTR(hh, s->users, u->jid, strlen(u->jid), u);
+	if(s->update_user_cb)
+	{
+		return s->update_user_cb(s->update_user_ptr, u);
+	}
 
 	return 0;
 }
@@ -80,6 +87,15 @@ session_cb_priv_msg(session_t *s, void *priv_msg_ptr,
 {
 	s->priv_msg_cb = priv_msg_cb;
 	s->priv_msg_ptr = priv_msg_ptr;
+	return 0;
+}
+
+int
+session_cb_update_user(session_t *s, void *update_user_ptr,
+		int (*update_user_cb)(void *, user_t *))
+{
+	s->update_user_cb = update_user_cb;
+	s->update_user_ptr = update_user_ptr;
 	return 0;
 }
 
