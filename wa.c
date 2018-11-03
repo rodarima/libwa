@@ -15,6 +15,7 @@
 #include "wa.h"
 #include "crypto.h"
 #include "bnode.h"
+#include "session.h"
 #include "log.h"
 
 void qr_encode(char *s);
@@ -183,14 +184,16 @@ wa_login(wa_t *wa)
 int
 wa_handle_msg_bin(wa_t *wa, msg_t *msg)
 {
-	msg_t *dec;
+	msg_t *msg_dec;
+	bnode_t *bn;
 
 	LOG_INFO("RECV BIN: tag:%s len:%lu\n", msg->tag, msg->len);
 	//hexdump(msg->cmd, msg->len);
 	LOG_INFO("Trying to decrypt...\n");
-	dec = crypto_decrypt_msg(wa->c, msg);
-	bnode_print_msg(dec);
-	return 0;
+	msg_dec = crypto_decrypt_msg(wa->c, msg);
+	bn = bnode_parse_msg(msg_dec);
+
+	return session_recv_bnode(wa->s, bn);
 }
 
 int
@@ -344,6 +347,15 @@ wa_init()
 
 	wa->c = crypto_init();
 	wa->d = dispatch_init();
+	wa->s = session_init();
 
 	return wa;
+}
+
+/* Ugly */
+int
+wa_cb_priv_msg(wa_t *wa, void *priv_msg_ptr,
+		int (*priv_msg_cb)(void *, priv_msg_t *))
+{
+	return session_cb_priv_msg(wa->s, priv_msg_ptr, priv_msg_cb);
 }

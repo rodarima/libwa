@@ -8,7 +8,7 @@
 #include "pmsg.h"
 #include "test/msg.h"
 
-//#define DEBUG
+#define DEBUG LOG_LEVEL_INFO
 
 #include "log.h"
 
@@ -32,6 +32,14 @@ enum tag_t
 	TAG_PACKED_MAX      = 254,
 };
 
+/* We don't actually need those tokens to be strings, as we can use an
+ * identifier for each one. Most of them are used only as tags, to be later
+ * compared with strcmp() with the overhead added.
+ *
+ * Let's wait until we can identify the slowest part (Knuth).
+ */
+
+
 char *token_table[] = {
 	NULL,NULL,NULL,"200","400","404","500","501","502","action","add",
 	"after","archive","author","available","battery","before","body",
@@ -43,7 +51,7 @@ char *token_table[] = {
 	"notification","notify","out","owner","participant","paused",
 	"picture","played","presence","preview","promote","query","raw",
 	"read","receipt","received","recipient","recording","relay",
-	"remove","response","resume","retry",/*"s.whatsapp.net"*/"c.us","seconds",
+	"remove","response","resume","retry","s.whatsapp.net"/*"c.us"*/,"seconds",
 	"set","size","status","subject","subscribe","t","text","to","true",
 	"type","unarchive","unavailable","url","user","value","web","width",
 	"mute","read_only","admin","creator","short","update","powersave",
@@ -64,32 +72,6 @@ typedef struct {
 	unsigned char *end;
 } parser_t;
 
-enum bnode_type {
-	BNODE_EMPTY = 0,
-	BNODE_STRING,
-	BNODE_INT,
-	BNODE_LIST,
-	BNODE_BINARY
-};
-
-struct bnode_t {
-	char *desc;
-
-	struct json_object *attr;
-
-	int len;
-
-	enum bnode_type type;
-	union content {
-		struct bnode_t **list;
-		char *bytes;
-		int number;
-		char *str;
-	} data;
-};
-
-typedef struct bnode_t bnode_t;
-
 char nibble_table[] = {
 	'0','1','2','3','4','5','6','7','8','9','-','.','\0','\0','\0','\0',
 };
@@ -97,13 +79,23 @@ char hex_table[] = {
 	'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'
 };
 
+char *bnode_type_str[] = { "empty", "string", "int", "list", "binary" };
 
+
+int
+handle(bnode_t *bn);
 
 bnode_t *
 read_bnode(parser_t *p);
 
 char *
 read_string(parser_t *p, int tag);
+
+int
+bnode_print(bnode_t *bn, int indent);
+
+
+
 
 int
 read_int(parser_t *p, size_t len)
@@ -114,7 +106,7 @@ read_int(parser_t *p, size_t len)
 	assert(p->ptr + len <= p->end);
 
 	v = p->ptr[0];
-	LOG_INFO("v=%02X (%d) len=%ld\n", v, v, len);
+	LOG_DEBUG("v=%02X (%d) len=%ld\n", v, v, len);
 
 	for(i=1; i < len; i++)
 	{
@@ -151,7 +143,7 @@ list_size(parser_t *p, int tag)
 char *
 read_bytes(parser_t *p, int len)
 {
-	LOG_INFO("len = %d\n", len);
+	LOG_DEBUG("len = %d\n", len);
 	assert(p->ptr + len <= p->end);
 
 	char *s = malloc(len + 1);
@@ -271,11 +263,11 @@ read_string(parser_t *p, int tag)
 
 			/* Are these used? */
 		case TAG_BINARY_8:
-			return read_bytes(p, 1);
+			return read_bytes(p, read_int(p, 1));
 		case TAG_BINARY_20:
-			return read_bytes(p, 3);
+			return read_bytes(p, read_int(p, 3) & 0x000FFFFF);
 		case TAG_BINARY_32:
-			return read_bytes(p, 4);
+			return read_bytes(p, read_int(p, 4));
 		case TAG_LIST_EMPTY:
 			return NULL;
 
@@ -314,11 +306,11 @@ read_attr(parser_t *p, int len)
 
 	for(i=0; i<len; i++)
 	{
-		LOG_INFO("--- New attr ---\n");
+		LOG_DEBUG("--- New attr ---\n");
 		key = read_string(p, read_int(p, 1));
-		LOG_INFO("key = %s\n", key);
+		LOG_DEBUG("key = %s\n", key);
 		val = read_string(p, read_int(p, 1));
-		LOG_INFO("attr %s : %s\n", key, val);
+		LOG_DEBUG("attr %s : %s\n", key, val);
 		val_json = json_object_new_string(val);
 		json_object_object_add(obj, key, val_json);
 	}
@@ -387,8 +379,6 @@ bnode_binary(parser_t *p, bnode_t *bn, int tag)
 	bn->type = BNODE_BINARY;
 	bn->data.bytes = read_bytes(p, len);
 
-	pmsg_unpack(bn->data.bytes, bn->len);
-
 	return 0;
 }
 
@@ -419,21 +409,21 @@ parse_content(parser_t *p, bnode_t *bn, int tag)
 		case TAG_BINARY_8:
 		case TAG_BINARY_20:
 		case TAG_BINARY_32:
-			LOG_INFO("BNODE BINARY\n");
+			LOG_DEBUG("BNODE BINARY\n");
 			return bnode_binary(p, bn, tag);
 		case TAG_LIST_EMPTY:
 		case TAG_LIST_8:
 		case TAG_LIST_16:
-			LOG_INFO("BNODE LIST\n");
+			LOG_DEBUG("BNODE LIST\n");
 			return bnode_list(p, bn, tag);
 		case TAG_JID_PAIR:
-			LOG_INFO("BNODE JID\n");
+			LOG_DEBUG("BNODE JID\n");
 			return bnode_jid_pair(p, bn);
 		case TAG_NIBBLE_8:
-			LOG_INFO("BNODE NIBBLE\n");
+			LOG_DEBUG("BNODE NIBBLE\n");
 			return bnode_nibbles(p, bn);
 		case TAG_HEX_8:
-			LOG_INFO("BNODE HEX\n");
+			LOG_DEBUG("BNODE HEX\n");
 			return bnode_hex(p, bn);
 		default:
 			LOG_ERR("Unknown content tag %d\n", tag);
@@ -456,20 +446,20 @@ read_bnode(parser_t *p)
 	bn->type = BNODE_EMPTY;
 
 	tag = read_int(p, 1);
-	LOG_INFO("TAG:%d\n", tag);
+	LOG_DEBUG("TAG:%d\n", tag);
 	size = list_size(p, tag);
-	LOG_INFO("SIZE:%d\n", size);
+	LOG_DEBUG("SIZE:%d\n", size);
 	desc_tag = read_int(p, 1);
 
 	if(desc_tag == TAG_STREAM_END)
 		return NULL;
 
 	bn->desc = read_string(p, desc_tag);
-	LOG_INFO("DESC:%s\n", bn->desc);
+	LOG_DEBUG("DESC:%s\n", bn->desc);
 
 	attr_len = (size - 1) / 2;
 
-	LOG_INFO("size=%d, attr_len=%d\n", size, attr_len);
+	LOG_DEBUG("size=%d, attr_len=%d\n", size, attr_len);
 
 	bn->attr = read_attr(p, attr_len);
 
@@ -483,7 +473,7 @@ read_bnode(parser_t *p)
 }
 
 bnode_t *
-msg_to_bnode(msg_t *msg)
+bnode_parse_msg(msg_t *msg)
 {
 	parser_t *p;
 	bnode_t *bn;
@@ -492,39 +482,99 @@ msg_to_bnode(msg_t *msg)
 	p->start = msg->cmd;
 	p->ptr = p->start;
 	p->end = p->start + msg->len;
-	LOG_INFO("msg len:%ld\n", msg->len);
+	LOG_DEBUG("msg len:%ld\n", msg->len);
 
 	bn = read_bnode(p);
+#ifdef DEBUG
+	bnode_print(bn, 0);
+#endif
 	return bn;
 }
 
 int
-bnode_print(bnode_t *bn)
+print_attr(bnode_t *bn, int indent)
 {
+	char *pad = malloc(indent + 1);
 	int i;
 
-	LOG_INFO("desc:%s\n", bn->desc);
-	LOG_INFO("type:%d\n", bn->type);
+	for(i=0; i<indent; i++)
+	{
+		pad[i] = ' ';
+	}
+	pad[indent] = '\0';
+
+	struct json_object_iterator it;
+	struct json_object_iterator it_end;
+	struct json_object* obj;
+
+	obj = bn->attr;
+	it = json_object_iter_begin(obj);
+	it_end = json_object_iter_end(obj);
+
+	printf("%sattr:\n", pad);
+	printf("%s{\n", pad);
+
+	while (!json_object_iter_equal(&it, &it_end))
+	{
+		printf("%s  %s : %s\n",
+				pad,
+				json_object_iter_peek_name(&it),
+				json_object_get_string(
+					json_object_iter_peek_value(&it)));
+
+		json_object_iter_next(&it);
+	}
+
+	printf("%s}\n", pad);
+	free(pad);
+
+	return 0;
+}
+
+int
+bnode_print(bnode_t *bn, int indent)
+{
+	int i;
+	char *pad = malloc(indent + 1);
+	char *type_str = "unknown";
+	for(i=0; i<indent; i++)
+	{
+		pad[i] = ' ';
+	}
+	pad[indent] = '\0';
+
+	printf("%sBNODE\n", pad);
+	printf("%s{\n", pad);
+
+	printf("%s  desc: %s\n", pad, bn->desc);
+
+
+	type_str = bnode_type_str[bn->type];
+	printf("%s  type: %s\n", pad, type_str);
 
 	/* Print attrs here */
+
+	if(bn->attr)
+		print_attr(bn, indent+2);
 
 	switch(bn->type)
 	{
 		case BNODE_EMPTY:
-			LOG_INFO("content: empty\n");
+			printf("%s  content: empty\n", pad);
 			break;
 		case BNODE_STRING:
-			LOG_INFO("content: %s\n", bn->data.str);
+			printf("%s  content: %s\n", pad, bn->data.str);
 			break;
 		case BNODE_LIST:
-			LOG_INFO("content: list:\n");
+			printf("%s  content\n", pad);
+			printf("%s  {\n", pad);
 			for(i=0; i < bn->len; i++)
 			{
-				bnode_print(bn->data.list[i]);
+				bnode_print(bn->data.list[i], indent+4);
 			}
 			break;
 		case BNODE_BINARY:
-			LOG_INFO("content: binary:\n");
+			printf("%s  content: binary(%d):\n", pad, bn->len);
 #ifdef DEBUG
 			hexdump(bn->data.bytes, bn->len);
 #endif
@@ -534,15 +584,19 @@ bnode_print(bnode_t *bn)
 			return -1;
 	}
 
+	printf("%s}\n", pad);
+
+	free(pad);
+
 	return 0;
 }
 
 int
 bnode_print_msg(msg_t *msg)
 {
-	bnode_t *bn = msg_to_bnode(msg);
+	bnode_t *bn = bnode_parse_msg(msg);
 
-	return bnode_print(bn);
+	return bnode_print(bn, 0);
 }
 
 //int

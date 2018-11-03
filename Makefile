@@ -5,7 +5,7 @@ all: wac
 
 test: wa.o test.c
 
-wac: dispatcher.c wa.o ws.o qr.o crypto.o bnode.o pmsg.o pmsg.pb-c.o
+wac: dispatcher.c wa.o ws.o qr.o crypto.o bnode.o pmsg.o pmsg.pb-c.o session.o
 
 bnode: crypto.o pmsg.o pmsg.pb-c.o
 

@@ -8,6 +8,7 @@
 #include "msg.h"
 #include "dispatcher.h"
 #include "crypto.h"
+#include "session.h"
 
 #define MAX_QUEUE 10
 
@@ -31,8 +32,8 @@ typedef struct
 	int run;
 	int state;
 	dispatcher_t *d;
-	ws_t *ws;
 	crypto_t *c;
+	session_t *s;
 } wa_t;
 
 wa_t *wa_init();
@@ -42,5 +43,9 @@ void wa_loop(wa_t *w);
 
 msg_t *
 wa_request(wa_t *wa, msg_t *msg);
+
+int
+wa_cb_priv_msg(wa_t *wa, void *priv_msg_ptr,
+		int (*priv_msg_cb)(void *, priv_msg_t *));
 
 #endif
