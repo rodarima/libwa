@@ -46,5 +46,12 @@
 #define LOG_ERR(format, ... )
 #endif
 
+#else
+
+#define LOG_DEBUG(format, ... )
+#define LOG_INFO(format, ... )
+#define LOG_WARN(format, ... )
+#define LOG_ERR(format, ... )
+
 #endif /* ifdef DEBUG */
 

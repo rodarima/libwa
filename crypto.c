@@ -12,7 +12,7 @@
 #include "crypto.h"
 #include "msg.h"
 
-//#define DEBUG 1
+#define DEBUG LOG_LEVEL_ERROR
 
 #include "log.h"
 

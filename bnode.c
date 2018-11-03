@@ -485,7 +485,7 @@ bnode_parse_msg(msg_t *msg)
 	LOG_DEBUG("msg len:%ld\n", msg->len);
 
 	bn = read_bnode(p);
-#ifdef DEBUG
+#if (DEBUG >= LOG_LEVEL_INFO)
 	bnode_print(bn, 0);
 #endif
 	return bn;
