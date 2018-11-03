@@ -34,10 +34,10 @@ and start receiving messages. The encrypted messages are succesfully decrypted.
 	0A 0D 54 65 73 74 69 6E  67 20 6C 69 62 77 61 18   ..Testing libwa.
 	A8 85 E7 DE 05 20 00                               ..... ..........
 
-Received and sent text messages are displayed:
+Received and sent text messages are displayed with the name of the sender:
 
-	346XXXXXXXX@s.whatsapp.net: Have you ever seen a supernova?
-	346XXXXXXXX@s.whatsapp.net: Well...
-	346XXXXXXXX@s.whatsapp.net: Sometimes I power my phone screen in the dark
-	346XXXXXXXX@s.whatsapp.net: At maximum brightness
+	<me>: Have you ever seen a supernova?
+	Neil: Well...
+	Neil: Sometimes I power my phone screen in the dark
+	Neil: At maximum brightness
 
