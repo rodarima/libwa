@@ -1,0 +1,4 @@
+- Keep alive
+- Save/restore session
+- Get contact list
+- Send messages
