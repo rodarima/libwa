@@ -1,2 +1,4 @@
 wac
 *.o
+*.so
+test/
