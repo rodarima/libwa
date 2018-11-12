@@ -1,5 +1,3 @@
-- Refactor session functions in wa
-- Create a core module
 - Keep alive
 - Save/restore session
 - Send messages
