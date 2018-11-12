@@ -1,0 +1,17 @@
+digraph G {
+	fontname = "Bitstream Vera Sans"
+	fontsize = 8
+
+	node [ shape = "record" ]
+	edge [ arrowhead = "empty" ]
+
+	"wa" -> "dispatcher"
+	"wa" -> "login"
+	"dispatcher" -> "ws"
+	"handler" -> "crypto"
+	"handler" -> "bnode"
+	"bnode" -> "pmsg"
+	"dispatcher" -> "handler"
+	"wa" -> "crypto"
+}
+

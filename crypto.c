@@ -7,12 +7,16 @@
 #include <openssl/bio.h>
 #include <openssl/kdf.h>
 #include <openssl/hmac.h>
-#include <ctype.h>
+#include <openssl/rand.h>
 
 #include "crypto.h"
 #include "msg.h"
+#include "buf.h"
 
-#define DEBUG LOG_LEVEL_ERROR
+#define DEBUG LOG_LEVEL_INFO
+#define CLIENT_ID_BYTES 16
+
+#define TEST_KEYS 0
 
 #include "log.h"
 
@@ -32,47 +36,12 @@
  * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING */
 
 
-void
-hexdump(char *buf, size_t len)
-{
-	int i,j;
-	for(i=0; i< 1 + (len-1)/16; i++)
-	{
-		for(j=0; j<16; j++)
-		{
-			int p = i*16 + j;
-			if(p < len)
-				printf("%02X ", (unsigned char) buf[p]);
-			else
-				printf("   ");
-
-			if(j == 7)
-				printf(" ");
-		}
-		printf("  ");
-		for(j=0; j<16; j++)
-		{
-			int p = i*16 + j;
-			if(p < len)
-			{
-				if(isprint(buf[p]))
-					printf("%c", buf[p]);
-				else
-					printf(".");
-			}
-			else
-			{
-				break;
-			}
-		}
-		printf("\n");
-	}
-}
-
 #ifdef DEBUG
 #define LOG_HEXDUMP(buf, len) hexdump(buf, len)
+#define LOG_HEXDUMP_BUF(buf) buf_hexdump(buf)
 #else
 #define LOG_HEXDUMP(buf, len)
+#define LOG_HEXDUMP_BUF(buf, len)
 #endif
 
 size_t
@@ -88,14 +57,15 @@ b64_decode_len(const char *str)
 	return (len * 3) / 4 - pad;
 }
 
-int
-crypto_b64_decode(const char *str, char **ptrbuf, size_t *ptrlen)
+buf_t *
+crypto_b64_decode(const char *str)
 {
 	BIO *bio, *b64;
+	buf_t *buf;
 
-	size_t len = b64_decode_len(str);
-	char *buf = malloc(len);
-	assert(buf);
+	size_t dec_len, comp_len;
+
+	comp_len = b64_decode_len(str);
 
 	bio = BIO_new_mem_buf(str, -1);
 	b64 = BIO_new(BIO_f_base64());
@@ -104,13 +74,12 @@ crypto_b64_decode(const char *str, char **ptrbuf, size_t *ptrlen)
 	// No b64 newlines.
 	BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
 
-	*ptrlen = BIO_read(bio, buf, strlen(str));
-	assert(*ptrlen == len);
+	buf = buf_init(comp_len);
+	dec_len = BIO_read(bio, buf->ptr, strlen(str));
+	assert(dec_len == comp_len);
 	BIO_free_all(bio);
 
-	*ptrbuf = (void *) buf;
-
-	return 0;
+	return buf;
 }
 
 char *
@@ -154,23 +123,22 @@ crypto_init()
 	crypto_t *c = malloc(sizeof(crypto_t));
 	assert(c);
 
-	c->peer_key = NULL;
-	c->client_key = NULL;
+	c->client = NULL;
 
-#if DEBUG
+#if TEST_KEYS
 	/* Set the key by hand, to ensure the same results as the tests */
-	char *priv_key = " j\xfd.\xd1\x88!+\x17\xe8*\xfe\x81\xcf\x06\x0bL\xd4\x1a\x8a[\xf0\x19\xd9\x15v\xc1Z\x90\xd9R[";
+	unsigned char *priv_key = (unsigned char *)" j\xfd.\xd1\x88!+\x17\xe8*\xfe\x81\xcf\x06\x0bL\xd4\x1a\x8a[\xf0\x19\xd9\x15v\xc1Z\x90\xd9R[";
 
-	c->client_key = EVP_PKEY_new_raw_private_key(
-			EVP_PKEY_X25519, NULL, (unsigned char *)priv_key, 32);
+	c->client = EVP_PKEY_new_raw_private_key(
+			EVP_PKEY_X25519, NULL, priv_key, 32);
 
 	LOG_INFO("Private key:\n");
 	LOG_HEXDUMP(priv_key, 32);
 
-	char *pub_key_buf;
+	unsigned char *pub_key_buf;
 	int len;
 
-	len = EVP_PKEY_get1_tls_encodedpoint(c->client_key, (unsigned char **)&pub_key_buf);
+	len = EVP_PKEY_get1_tls_encodedpoint(c->client, &pub_key_buf);
 
 	LOG_INFO("Public key:\n");
 	LOG_HEXDUMP(pub_key_buf, len);
@@ -186,7 +154,7 @@ crypto_init()
 	if (EVP_PKEY_keygen_init(pctx) != 1)
 		return NULL;
 
-	if (EVP_PKEY_keygen(pctx, &c->client_key) != 1)
+	if (EVP_PKEY_keygen(pctx, &c->client) != 1)
 		return NULL;
 
 	EVP_PKEY_CTX_free(pctx);
@@ -197,97 +165,83 @@ crypto_init()
 }
 
 char *
-crypto_get_public_key(crypto_t *c)
+crypto_pubkey_to_b64(EVP_PKEY *p)
 {
 	unsigned char *pub_key_buf;
 	int len;
 
-	len = EVP_PKEY_get1_tls_encodedpoint(c->client_key, &pub_key_buf);
-
-	if (len != 32)
-		return NULL;
+	len = EVP_PKEY_get1_tls_encodedpoint(p, &pub_key_buf);
 
 	return crypto_b64_encode((char *) pub_key_buf, len);
 }
 
-static int
-derive_shared_key(crypto_t *c, EVP_PKEY *peer_key)
+static buf_t *
+derive_shared_key(EVP_PKEY *client, EVP_PKEY *peer)
 {
 
 	/* Generate shared secret */
 	EVP_PKEY_CTX *ctx;
-	unsigned char *skey;
-	size_t skeylen;
+	size_t len;
+	buf_t *shared_key;
 
-	ctx = EVP_PKEY_CTX_new(c->client_key, NULL);
+	ctx = EVP_PKEY_CTX_new(client, NULL);
 
 	EVP_PKEY_derive_init(ctx);
-	EVP_PKEY_derive_set_peer(ctx, peer_key);
-	EVP_PKEY_derive(ctx, NULL, &skeylen);
-	skey = malloc(skeylen);
-	EVP_PKEY_derive(ctx, skey, &skeylen);
+	EVP_PKEY_derive_set_peer(ctx, peer);
+	EVP_PKEY_derive(ctx, NULL, &len);
 
-	c->shared_key = (char *) skey;
-	c->shared_key_len = skeylen;
+	shared_key = buf_init(len);
 
-#if DEBUG
+	EVP_PKEY_derive(ctx, shared_key->ptr, &len);
+
 	LOG_INFO("Shared key:\n");
-	LOG_HEXDUMP(c->shared_key, c->shared_key_len);
-#endif
+	LOG_HEXDUMP_BUF(shared_key);
 
-	return 0;
+	return shared_key;
 }
 
-int
-expand_shared_key(crypto_t *c)
+buf_t *
+expand_shared_key(buf_t *shared_key)
 {
-	size_t outlen = 80;
-	char *out = malloc(outlen);
+	size_t len = 80;
+	buf_t *buf = buf_init(len);
 
 	EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
 	EVP_PKEY_derive_init(pctx);
 	EVP_PKEY_CTX_set_hkdf_md(pctx, EVP_sha256());
 	/*EVP_PKEY_CTX_set1_hkdf_salt(pctx, "salt", 4);*/
-	EVP_PKEY_CTX_set1_hkdf_key(pctx, c->shared_key, c->shared_key_len);
+	EVP_PKEY_CTX_set1_hkdf_key(pctx, shared_key->ptr, shared_key->len);
 	/*EVP_PKEY_CTX_add1_hkdf_info(pctx, "", 0);*/
-	EVP_PKEY_derive(pctx, (unsigned char *)out, &outlen);
+	EVP_PKEY_derive(pctx, buf->ptr, &len);
 
-	c->expanded_key = out;
-	c->expanded_key_len = outlen;
-
-#if DEBUG
 	LOG_INFO("Expanded key:\n");
-	LOG_HEXDUMP(out, outlen);
-#endif
+	LOG_HEXDUMP_BUF(buf);
 
-	return 0;
+	return buf;
 }
 
 int
-verify_expanded_key(crypto_t *c)
+verify_expanded_key(buf_t *secret, buf_t *expanded_key)
 {
-	void *key = &c->expanded_key[32];
-	size_t enc_len = c->secret_len - 32;
-	char *enc = malloc(enc_len);
-	char *sum = malloc(32);
-	char *md = malloc(32);
+	void *key = &expanded_key->ptr[32];
+	size_t enc_len = secret->len - 32;
+	unsigned char *enc = malloc(enc_len);
+	unsigned char *sum = malloc(32);
+	unsigned char *md = malloc(32);
 	unsigned int md_len = 32;
 	int cmp;
 
-	memcpy(enc, &c->secret[0], 32);
-	memcpy(sum, &c->secret[32], 32);
-	memcpy(&enc[32], &c->secret[64], enc_len - 32);
+	memcpy(enc, &secret->ptr[0], 32);
+	memcpy(sum, &secret->ptr[32], 32);
+	memcpy(&enc[32], &secret->ptr[64], enc_len - 32);
 
-	HMAC(EVP_sha256(), key, 32,
-			(unsigned char *)enc, enc_len,
-			(unsigned char *)md, &md_len);
+	HMAC(EVP_sha256(), key, 32, enc, enc_len, md, &md_len);
 
-#if DEBUG
 	LOG_INFO("Computed HMAC:\n");
 	LOG_HEXDUMP(md, 32);
 	LOG_INFO("Expected HMAC:\n");
 	LOG_HEXDUMP(sum, 32);
-#endif
+
 	cmp = memcmp(md, sum, 32);
 
 	free(enc);
@@ -297,30 +251,31 @@ verify_expanded_key(crypto_t *c)
 	return cmp;
 }
 
-int
-update_encryption_keys(crypto_t *c)
+buf_t *
+decrypt_keys(const buf_t *secret, const buf_t *ekey)
 {
-	//EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-	size_t enc_len = c->secret_len - 64;
-
-	unsigned char *enc = malloc(enc_len);
-	unsigned char *dec = malloc(enc_len + 32);
-	size_t dec_len = 0, final_len = 0;
+	buf_t *decrypted;
+	size_t enc_len, dec_len = 0, final_len = 0;
+	unsigned char *enc, *dec;
 	unsigned char key[32];
 	unsigned char iv[16];
 
-	memcpy(key, c->expanded_key, 32);
-	memcpy(iv, c->expanded_key + 64, 16);
+	enc_len = secret->len - 64;
+	enc = malloc(enc_len);
+	dec = malloc(enc_len + 32);
 
-	memcpy(enc, c->secret + 64, enc_len);
+	memcpy(key, ekey->ptr, 32);
+	memcpy(iv, ekey->ptr + 64, 16);
+
+	memcpy(enc, secret->ptr + 64, enc_len);
 
 #if DEBUG
 	LOG_INFO("key:\n");
-	LOG_HEXDUMP((char *)key, 32);
+	LOG_HEXDUMP(key, 32);
 	LOG_INFO("iv:\n");
-	LOG_HEXDUMP((char *)iv, 16);
+	LOG_HEXDUMP(iv, 16);
 	LOG_INFO("encrypted data:\n");
-	LOG_HEXDUMP((char*)enc, enc_len);
+	LOG_HEXDUMP(enc, enc_len);
 #endif
 
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
@@ -337,51 +292,88 @@ update_encryption_keys(crypto_t *c)
 			dec_len, enc_len);
 
 	LOG_INFO("Decrypted keys:\n");
-	LOG_HEXDUMP((char *) dec, dec_len);
+	LOG_HEXDUMP(dec, dec_len);
 #endif
-	char *enc_key = malloc(32);
-	char *mac_key = malloc(32);
+	decrypted = buf_init(dec_len);
+	memcpy(decrypted->ptr, dec, dec_len);
 
-	memcpy(enc_key, dec, 32);
-	memcpy(mac_key, dec + 32, 32);
+	free(dec);
+	free(enc);
 
-	LOG_INFO("enc_key:\n");
-	LOG_HEXDUMP(enc_key, 32);
-	LOG_INFO("mac_key:\n");
-	LOG_HEXDUMP(mac_key, 32);
-
-	c->enc_key = (unsigned char *) enc_key;
-	c->mac_key = (unsigned char *) mac_key;
-
-	return 0;
+	return decrypted;
 }
+
+buf_t *
+get_enc_key(buf_t *dec_keys)
+{
+	buf_t *enc_key = buf_init(32);
+
+	memcpy(enc_key->ptr, dec_keys->ptr, 32);
+
+	return enc_key;
+}
+
+buf_t *
+get_mac_key(buf_t *dec_keys)
+{
+	buf_t *mac_key = buf_init(32);
+
+	memcpy(mac_key->ptr, dec_keys->ptr + 32, 32);
+
+	return mac_key;
+}
+
 
 int
 crypto_update_secret(crypto_t *c, const char *b64_secret)
 {
-	crypto_b64_decode(b64_secret, &c->secret, &c->secret_len);
+	buf_t *shared_key;
+	buf_t *expanded_key;
+	buf_t *dec_keys;
+	buf_t *secret;
+	buf_t *peer_pubkey;
 
-	assert(c->secret_len == 144);
+	secret = crypto_b64_decode(b64_secret);
+
+	assert(secret->len == 144);
 
 	LOG_INFO("Secret:\n");
-	LOG_HEXDUMP(c->secret, c->secret_len);
+	LOG_HEXDUMP_BUF(secret);
+
+	peer_pubkey = buf_init(32);
+	memcpy(peer_pubkey->ptr, secret->ptr, 32);
 
 	EVP_PKEY *peer_key;
 
 	LOG_INFO("Peer public key:\n");
-	LOG_HEXDUMP(c->secret, 32);
+	LOG_HEXDUMP_BUF(peer_pubkey);
 
 	peer_key = EVP_PKEY_new_raw_public_key(
-			EVP_PKEY_X25519, NULL, (unsigned char *)c->secret, 32);
+			EVP_PKEY_X25519, NULL,
+			peer_pubkey->ptr, peer_pubkey->len);
 
-	derive_shared_key(c, peer_key);
+	buf_free(peer_pubkey);
 
-	expand_shared_key(c);
+	assert(peer_key);
 
-	if(verify_expanded_key(c))
+	shared_key = derive_shared_key(c->client, peer_key);
+
+	expanded_key = expand_shared_key(shared_key);
+
+	if(verify_expanded_key(secret, expanded_key))
 		return 1;
 
-	update_encryption_keys(c);
+	dec_keys = decrypt_keys(secret, expanded_key);
+
+	buf_free(secret);
+	buf_free(shared_key);
+	buf_free(expanded_key);
+
+	c->enc_key = get_enc_key(dec_keys);
+	c->mac_key = get_mac_key(dec_keys);
+
+	/* XXX: Not used anymore? */
+	buf_free(dec_keys);
 
 	return 0;
 }
@@ -399,13 +391,13 @@ crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 	unsigned char *dec_msg = malloc(dec_msg_len);
 
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-	EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, c->enc_key, iv);
+	EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, c->enc_key->ptr, iv);
 	EVP_DecryptUpdate(ctx, dec_msg, &dec_msg_len, enc_msg, enc_msg_len);
 	EVP_DecryptFinal_ex(ctx, dec_msg + dec_msg_len, &final_len);
 	dec_msg_len += final_len;
 
 	LOG_INFO("MSG DECRYPTED:\n");
-	LOG_HEXDUMP((char *)dec_msg, dec_msg_len);
+	LOG_HEXDUMP(dec_msg, dec_msg_len);
 	/*
 	 * TODO: Verify msg with HMAC
 	 *
@@ -421,39 +413,23 @@ crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 	return dmsg;
 }
 
-/*
-int
-main()
+
+char *
+crypto_generate_client_id()
 {
-	char *buf;
-	size_t len;
+	char buf[CLIENT_ID_BYTES], *client_id;
+	if(RAND_bytes((unsigned char *)buf, CLIENT_ID_BYTES) <= 0)
+	{
+		return NULL;
+	}
 
-	crypto_b64_decode("Y2FjYWh1ZXRpbGxvAA==", &buf, &len);
+	client_id = crypto_b64_encode(buf, CLIENT_ID_BYTES);
 
-	LOG_INFO("%s\n", buf);
-	LOG_HEXDUMP(buf, len);
+	return client_id;
 }
-*/
 
-/*
-int main()
+char *
+crypto_get_pub_client(crypto_t *c)
 {
-	EVP_PKEY *pkey = NULL;
-	if(generate_keys(&pkey))
-		return 1;
-
-	EC_KEY *ec_key = EVP_PKEY_get1_EC_KEY(pkey);
-
-	unsigned char *pub_key_buf;
-	EVP_PKEY_get1_tls_encodedpoint(pkey, &pub_key_buf);
-
-	int i;
-	for(i=0; i<32; i++)
-		LOG_INFO("%02X ", pub_key_buf[i]);
-	LOG_INFO("\n");
-
-	LOG_INFO("%s\n", b64_encode(pub_key_buf, 32));
-
-	return 0;
+	return crypto_pubkey_to_b64(c->client);
 }
-*/

@@ -10,12 +10,25 @@ cb_priv_msg(void *ptr, priv_msg_t *msg)
 }
 
 int
-main()
+cb_update_user(void *ptr, user_t *u)
 {
-	wa_t *wa = wa_init();
-	wa_cb_priv_msg(wa, NULL, cb_priv_msg);
-	wa_login(wa);
+	printf("New user: %s (%s)\n", u->name, u->jid);
+	return 0;
+}
 
+int
+main(int argc, char *argv[])
+{
+	cb_t cb =
+	{
+		.ptr = NULL,
+		.priv_msg = cb_priv_msg,
+		.update_user = cb_update_user,
+	};
+
+	wa_t *wa = wa_init(&cb);
+
+	wa_login(wa);
 	wa_loop(wa);
 	wa_free(wa);
 

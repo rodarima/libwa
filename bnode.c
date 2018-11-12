@@ -5,7 +5,6 @@
 #include "bnode.h"
 #include "msg.h"
 #include "crypto.h"
-#include "pmsg.h"
 #include "test/msg.h"
 
 #define DEBUG LOG_LEVEL_INFO
@@ -140,13 +139,13 @@ list_size(parser_t *p, int tag)
 	return -2;
 }
 
-char *
+unsigned char *
 read_bytes(parser_t *p, int len)
 {
 	LOG_DEBUG("len = %d\n", len);
 	assert(p->ptr + len <= p->end);
 
-	char *s = malloc(len + 1);
+	unsigned char *s = malloc(len + 1);
 	assert(s);
 
 	memcpy(s, p->ptr, len);
@@ -263,11 +262,11 @@ read_string(parser_t *p, int tag)
 
 			/* Are these used? */
 		case TAG_BINARY_8:
-			return read_bytes(p, read_int(p, 1));
+			return (char *)read_bytes(p, read_int(p, 1));
 		case TAG_BINARY_20:
-			return read_bytes(p, read_int(p, 3) & 0x000FFFFF);
+			return (char *)read_bytes(p, read_int(p, 3) & 0x000FFFFF);
 		case TAG_BINARY_32:
-			return read_bytes(p, read_int(p, 4));
+			return (char *)read_bytes(p, read_int(p, 4));
 		case TAG_LIST_EMPTY:
 			return NULL;
 

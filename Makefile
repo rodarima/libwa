@@ -1,19 +1,23 @@
+CC=clang
 LDLIBS=-lcrypto -lwebsockets -ljson-c -lqrencode -lprotobuf-c -pthread
 CFLAGS=-g -Wall -Werror -fPIC
 
 LIB_CFLAGS=$(CFLAGS) -shared
 INSTALL_DIR=/usr
 
-all: libwa.so wac
+FILES = $(wildcard *.c)
+OBJS = $(subst .c,.o,$(FILES))
+
+all: wac libwa.so
 
 test: wa.o test.c
 
-wac: dispatcher.c wa.o ws.o qr.o crypto.o pmsg.pb-c.o bnode.o pmsg.o session.o
+wac: $(OBJS)
 
-libwa.so: dispatcher.o wa.o ws.o qr.o crypto.o pmsg.pb-c.o bnode.o pmsg.o session.o
+libwa.so: $(OBJS)
 	$(CC) $(LIB_CFLAGS) $^ -o $@ $(LDLIBS)
 
-bnode: crypto.o pmsg.o pmsg.pb-c.o
+bnode: crypto.o l4.o pmsg.pb-c.o
 
 pmsg.pb-c.o: pmsg.pb-c.c
 

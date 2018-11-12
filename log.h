@@ -12,12 +12,12 @@
 
 
 #define _LOG_MSG(level, format, ... ) \
-	fprintf(stderr, "%s %s(%d) " format, level, __FUNCTION__,  __LINE__ \
-			__VA_OPT__(,) __VA_ARGS__ )
+	fprintf(stderr, "%s %s(%d) " format, level, __FUNCTION__,  __LINE__, \
+			##__VA_ARGS__ )
 
 #if (DEBUG >= LOG_LEVEL_DEBUG)
 #define LOG_DEBUG(format, ... ) \
-	_LOG_MSG("DD", format, __VA_ARGS__ )
+	_LOG_MSG("DD", format, ##__VA_ARGS__ )
 #else
 #define LOG_DEBUG(format, ... )
 #endif
@@ -25,7 +25,7 @@
 
 #if (DEBUG >= LOG_LEVEL_INFO)
 #define LOG_INFO(format, ... ) \
-	_LOG_MSG("II", format, __VA_ARGS__ )
+	_LOG_MSG("II", format, ##__VA_ARGS__ )
 #else
 #define LOG_INFO(format, ... )
 #endif
@@ -33,7 +33,7 @@
 
 #if (DEBUG >= LOG_LEVEL_WARN)
 #define LOG_WARN(format, ... ) \
-	_LOG_MSG("II", format, __VA_ARGS__ )
+	_LOG_MSG("II", format, ##__VA_ARGS__ )
 #else
 #define LOG_WARN(format, ... )
 #endif
@@ -41,7 +41,7 @@
 
 #if (DEBUG >= LOG_LEVEL_ERR)
 #define LOG_ERR(format, ... ) \
-	_LOG_MSG("II", format, __VA_ARGS__ )
+	_LOG_MSG("II", format, ##__VA_ARGS__ )
 #else
 #define LOG_ERR(format, ... )
 #endif

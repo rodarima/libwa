@@ -1,14 +1,13 @@
-#ifndef _WA_H_
-#define _WA_H_
+#pragma once
 
 #include <openssl/evp.h>
 #include <pthread.h>
 #include <uthash.h>
 #include "ws.h"
 #include "msg.h"
-#include "dispatcher.h"
+#include "buf.h"
 #include "crypto.h"
-#include "session.h"
+#include "dispatcher.h"
 
 #define MAX_QUEUE 10
 
@@ -17,39 +16,70 @@
 
 typedef struct
 {
-	/* Session */
+	char *name;
+	char *notify;
+	char *jid;
+
+	UT_hash_handle hh;
+} user_t;
+
+typedef struct
+{
+	char *text;
+	user_t *from;
+	user_t *to;
+} priv_msg_t;
+
+typedef struct
+{
+	/* User ptr */
+	void *ptr;
+
+	/* Callbacks */
+	int (*priv_msg)(void *, priv_msg_t *);
+	int (*update_user)(void *, user_t *);
+
+} cb_t;
+
+
+typedef struct
+{
+	/* In base64 */
 	char *client_id;
 	char *client_token;
 	char *server_token;
 	char *browser_token;
 	char *secret;
 	char *ref;
-	EVP_PKEY *keypair;
-	EVP_PKEY *peer_key;
 	char *pubkey;
+
+
+	/* Hash map using jid as keys */
+	user_t *users;
+
+	/* Just a single user */
+	user_t *me;
 
 	/* Internals */
 	int run;
 	int state;
 	dispatcher_t *d;
 	crypto_t *c;
-	session_t *s;
+	cb_t *cb;
 } wa_t;
 
-wa_t *wa_init();
-int wa_login(wa_t *w);
-void wa_free(wa_t *w);
-void wa_loop(wa_t *w);
+
+wa_t *
+wa_init(cb_t *cb);
+
+int
+wa_login(wa_t *w);
+
+void
+wa_free(wa_t *w);
+
+void
+wa_loop(wa_t *w);
 
 msg_t *
 wa_request(wa_t *wa, msg_t *msg);
-
-int
-wa_cb_priv_msg(wa_t *wa, void *priv_msg_ptr,
-		int (*priv_msg_cb)(void *, priv_msg_t *));
-
-int
-wa_cb_update_user(wa_t *wa, void *update_user_ptr,
-		int (*update_user_cb)(void *, user_t *));
-
-#endif

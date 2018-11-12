@@ -23,7 +23,7 @@ struct bnode_t {
 	enum bnode_type type;
 	union content {
 		struct bnode_t **list;
-		char *bytes;
+		unsigned char *bytes;
 		int number;
 		char *str;
 	} data;

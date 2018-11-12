@@ -2,3 +2,5 @@ wac
 *.o
 *.so
 test/
+*.pb-c.c
+*.pb-c.h

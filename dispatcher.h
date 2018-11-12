@@ -1,5 +1,4 @@
-#ifndef _DISPATCHER_H_
-#define _DISPATCHER_H_
+#pragma once
 
 #include "msg.h"
 #include "ws.h"
@@ -58,5 +57,3 @@ dispatch_wait_reply(dispatcher_t *d, const char *tag);
 
 msg_t *
 dispatch_wait_event(dispatcher_t *d, int ms);
-
-#endif

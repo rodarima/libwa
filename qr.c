@@ -8,7 +8,8 @@
 
 #define BORDER 1
 
-void qr_encode(char *s)
+void
+qr_print(char *s)
 {
 	QRcode* qr;
 	int i, j, jj, total_size, qr_size;
@@ -25,7 +26,7 @@ void qr_encode(char *s)
 	{
 		for(j=0; j < total_size; j++)
 		{
-			printf(dot[0]);
+			printf("%s", dot[0]);
 		}
 		printf("\n");
 	}
@@ -40,7 +41,7 @@ void qr_encode(char *s)
 			else
 				c = qr->data[i*qr->width + jj] & 0x01;
 
-			printf(dot[c]);
+			printf("%s", dot[c]);
 		}
 		printf("\n");
 	}
@@ -48,7 +49,7 @@ void qr_encode(char *s)
 	{
 		for(j=0; j < total_size; j++)
 		{
-			printf(dot[0]);
+			printf("%s", dot[0]);
 		}
 		printf("\n");
 	}
@@ -56,6 +57,7 @@ void qr_encode(char *s)
 
 	QRcode_free(qr);
 }
+
 
 /*
 int main()
