@@ -1,4 +1,4 @@
-#define _DEBUG 1
+#define _DEBUG 1 /* Debug libwebsockets */
 
 #include <libwebsockets.h>
 #include <string.h>
@@ -8,7 +8,10 @@
 
 #include "ws.h"
 
-//#define DEBUG
+#define DEBUG_SERVER 0
+
+#define DEBUG LOG_LEVEL_DEBUG
+#include "log.h"
 
 static int
 ws_recv(ws_t *ws, void *in, size_t len, size_t remaining)
@@ -122,7 +125,7 @@ int ws_connect(ws_t *ws)
 
 	info.context = ws->ctx;
 
-#ifdef DEBUG
+#if DEBUG_SERVER
 
 	info.ssl_connection = 0;
 	info.host = "localhost";
@@ -181,10 +184,12 @@ void *ws_worker(void *arg)
 
 	while (!ws->interrupted)
 	{
-		lws_service(ws->ctx, 500);
-		//fprintf(stderr, "WS thread: alive!\n");
 		//pthread_mutex_lock(ws->send_lock);
+		//LOG_DEBUG("Locked ws->send_lock\n");
+		lws_service(ws->ctx, 50);
+		//fprintf(stderr, "WS thread: alive!\n");
 		//pthread_mutex_unlock(ws->send_lock);
+		//LOG_DEBUG("Unlocked ws->send_lock\n");
 	}
 
 	fprintf(stderr, "WS thread: bye!\n");
@@ -199,6 +204,7 @@ ws_send_pkt(ws_t *ws, packet_t *pkt)
 	int sent;
 
 	fprintf(stderr, "%s: sending %ld bytes\n", __func__, pkt->total);
+	LOG_DEBUG("Trying to acquire mutex ws->send_lock\n");
 
 	pthread_mutex_lock(ws->send_lock);
 

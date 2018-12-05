@@ -112,6 +112,7 @@ wa_init(cb_t *cb)
 	wa->me->jid = "my jid";
 	wa->me->notify = "notify?";
 	wa->state = WA_STATE_LOGGING;
+	wa->keep_alive_next = 0;
 
 	return wa;
 }
@@ -155,6 +156,7 @@ wa_loop(wa_t *wa)
 
 	while(wa->run)
 	{
+		l1_send_keep_alive(wa);
 		msg = dispatch_wait_event(wa->d, 50);
 		if(!msg) continue;
 

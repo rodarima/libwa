@@ -5,18 +5,30 @@
 
 #include "wa.h"
 #include "ws.h"
+#include "buf.h"
+
+#define DEBUG LOG_LEVEL_INFO
+#include "log.h"
 
 static msg_t *
 packet_to_msg(packet_t *pkt)
 {
 	char *sep;
 	void *cmd;
-
-	msg_t *msg = malloc(sizeof(msg_t));
+	msg_t *msg;
 
 	/* Find the tag */
 	sep = memchr(pkt->buf, ',', pkt->total);
-	assert(sep);
+
+	/* The reply to keep alive packet doesn't contain a separator: Just
+	 * ignore those packets.
+	 *
+	 * XXX: Maybe we need the result in the future, for now just gets
+	 * ignored */
+	if(!sep)
+		return NULL;
+
+	msg = malloc(sizeof(msg_t));
 
 	/* Terminate the tag string */
 	*sep = '\0';
@@ -145,10 +157,14 @@ dispatch_recv_packet(packet_t *pkt, void *user)
 
 	msg_t *msg = packet_to_msg(pkt);
 
-	//fprintf(stderr, "RECV tag:%s\n", msg->tag);
+	/* If the conversion failed, discard the packet */
 
 	if(!msg)
-		return -1;
+	{
+		LOG_INFO("Ignoring packet:\n");
+		hexdump((const unsigned char *) pkt->buf, pkt->total);
+		return 0;
+	}
 
 	if (dispatch_recv_msg(d, msg))
 	{
@@ -164,7 +180,7 @@ dispatch_recv_packet(packet_t *pkt, void *user)
 	return 0;
 }
 
-static int
+int
 dispatch_send_msg(dispatcher_t *d, const msg_t *msg)
 {
 	size_t sent;

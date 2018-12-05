@@ -46,6 +46,9 @@ dispatch_end(dispatcher_t *d);
 int
 dispatch_events(dispatcher_t *d);
 
+int
+dispatch_send_msg(dispatcher_t *d, const msg_t *msg);
+
 msg_t *
 dispatch_request(dispatcher_t *d, const msg_t *msg);
 

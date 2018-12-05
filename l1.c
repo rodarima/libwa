@@ -126,3 +126,42 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 	LOG_ERR("Unknown json msg received\n");
 	return 0;
 }
+
+int
+l1_send_keep_alive(wa_t *wa)
+{
+	/* We need to send the byte string "?,," without null terminator to the
+	 * server, and with a random interval between 20000 and 90000 ms.
+	 */
+
+	struct timespec ts;
+	msg_t *msg;
+	int r, rmin = 20, rmax = 90;
+
+	if(wa->state != WA_STATE_LOGGED_IN)
+		return 0;
+
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	if(wa->keep_alive_next > ts.tv_sec)
+		return 0;
+
+	LOG_INFO("Sending keep alive\n");
+
+	msg = malloc(sizeof(msg_t));
+	assert(msg);
+
+	msg->tag = "?";
+	msg->cmd = ",";
+	msg->len = 1;
+
+	if(dispatch_send_msg(wa->d, msg))
+		return -1;
+
+	free(msg);
+
+	r = rmin + (rand() % (rmax - rmin));
+	wa->keep_alive_next = ts.tv_sec + r;
+
+	return 0;
+}

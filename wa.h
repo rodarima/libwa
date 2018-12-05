@@ -3,6 +3,8 @@
 #include <openssl/evp.h>
 #include <pthread.h>
 #include <uthash.h>
+#include <time.h>
+
 #include "ws.h"
 #include "msg.h"
 #include "buf.h"
@@ -63,6 +65,7 @@ typedef struct
 	/* Internals */
 	int run;
 	int state;
+	time_t keep_alive_next;
 	dispatcher_t *d;
 	crypto_t *c;
 	cb_t *cb;

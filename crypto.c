@@ -36,12 +36,12 @@
  * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING */
 
 
-#ifdef DEBUG
+#if (DEBUG >= LOG_LEVEL_DEBUG)
 #define LOG_HEXDUMP(buf, len) hexdump(buf, len)
 #define LOG_HEXDUMP_BUF(buf) buf_hexdump(buf)
 #else
 #define LOG_HEXDUMP(buf, len)
-#define LOG_HEXDUMP_BUF(buf, len)
+#define LOG_HEXDUMP_BUF(buf)
 #endif
 
 size_t
@@ -132,7 +132,7 @@ crypto_init()
 	c->client = EVP_PKEY_new_raw_private_key(
 			EVP_PKEY_X25519, NULL, priv_key, 32);
 
-	LOG_INFO("Private key:\n");
+	LOG_DEBUG("Private key:\n");
 	LOG_HEXDUMP(priv_key, 32);
 
 	unsigned char *pub_key_buf;
@@ -140,7 +140,7 @@ crypto_init()
 
 	len = EVP_PKEY_get1_tls_encodedpoint(c->client, &pub_key_buf);
 
-	LOG_INFO("Public key:\n");
+	LOG_DEBUG("Public key:\n");
 	LOG_HEXDUMP(pub_key_buf, len);
 
 #else
@@ -194,7 +194,7 @@ derive_shared_key(EVP_PKEY *client, EVP_PKEY *peer)
 
 	EVP_PKEY_derive(ctx, shared_key->ptr, &len);
 
-	LOG_INFO("Shared key:\n");
+	LOG_DEBUG("Shared key:\n");
 	LOG_HEXDUMP_BUF(shared_key);
 
 	return shared_key;
@@ -214,7 +214,7 @@ expand_shared_key(buf_t *shared_key)
 	/*EVP_PKEY_CTX_add1_hkdf_info(pctx, "", 0);*/
 	EVP_PKEY_derive(pctx, buf->ptr, &len);
 
-	LOG_INFO("Expanded key:\n");
+	LOG_DEBUG("Expanded key:\n");
 	LOG_HEXDUMP_BUF(buf);
 
 	return buf;
@@ -237,9 +237,9 @@ verify_expanded_key(buf_t *secret, buf_t *expanded_key)
 
 	HMAC(EVP_sha256(), key, 32, enc, enc_len, md, &md_len);
 
-	LOG_INFO("Computed HMAC:\n");
+	LOG_DEBUG("Computed HMAC:\n");
 	LOG_HEXDUMP(md, 32);
-	LOG_INFO("Expected HMAC:\n");
+	LOG_DEBUG("Expected HMAC:\n");
 	LOG_HEXDUMP(sum, 32);
 
 	cmp = memcmp(md, sum, 32);
@@ -269,31 +269,28 @@ decrypt_keys(const buf_t *secret, const buf_t *ekey)
 
 	memcpy(enc, secret->ptr + 64, enc_len);
 
-#if DEBUG
-	LOG_INFO("key:\n");
+	LOG_DEBUG("key:\n");
 	LOG_HEXDUMP(key, 32);
-	LOG_INFO("iv:\n");
+	LOG_DEBUG("iv:\n");
 	LOG_HEXDUMP(iv, 16);
-	LOG_INFO("encrypted data:\n");
+	LOG_DEBUG("encrypted data:\n");
 	LOG_HEXDUMP(enc, enc_len);
-#endif
 
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 	EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
 	EVP_DecryptUpdate(ctx, dec, (int *)&dec_len, enc, enc_len);
-	LOG_INFO("dec_len = %ld\n", dec_len);
+	LOG_DEBUG("dec_len = %ld\n", dec_len);
 	EVP_DecryptFinal_ex(ctx, dec + dec_len, (int *)&final_len);
 
-	LOG_INFO("final_len = %ld\n", final_len);
+	LOG_DEBUG("final_len = %ld\n", final_len);
 	dec_len += final_len;
 
-#if DEBUG
-	LOG_INFO("dec_len = %ld, enc_len = %ld\n",
+	LOG_DEBUG("dec_len = %ld, enc_len = %ld\n",
 			dec_len, enc_len);
 
-	LOG_INFO("Decrypted keys:\n");
+	LOG_DEBUG("Decrypted keys:\n");
 	LOG_HEXDUMP(dec, dec_len);
-#endif
+
 	decrypted = buf_init(dec_len);
 	memcpy(decrypted->ptr, dec, dec_len);
 
@@ -337,7 +334,7 @@ crypto_update_secret(crypto_t *c, const char *b64_secret)
 
 	assert(secret->len == 144);
 
-	LOG_INFO("Secret:\n");
+	LOG_DEBUG("Secret:\n");
 	LOG_HEXDUMP_BUF(secret);
 
 	peer_pubkey = buf_init(32);
@@ -345,7 +342,7 @@ crypto_update_secret(crypto_t *c, const char *b64_secret)
 
 	EVP_PKEY *peer_key;
 
-	LOG_INFO("Peer public key:\n");
+	LOG_DEBUG("Peer public key:\n");
 	LOG_HEXDUMP_BUF(peer_pubkey);
 
 	peer_key = EVP_PKEY_new_raw_public_key(
@@ -396,12 +393,12 @@ crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 	EVP_DecryptFinal_ex(ctx, dec_msg + dec_msg_len, &final_len);
 	dec_msg_len += final_len;
 
-	LOG_INFO("MSG DECRYPTED:\n");
+	LOG_DEBUG("MSG DECRYPTED:\n");
 	LOG_HEXDUMP(dec_msg, dec_msg_len);
 	/*
 	 * TODO: Verify msg with HMAC
 	 *
-	 * LOG_INFO("HMAC sum\n");
+	 * LOG_DEBUG("HMAC sum\n");
 	 * LOG_HEXDUMP((char *)hmac_sum, 32);
 	*/
 

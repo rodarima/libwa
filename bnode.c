@@ -484,7 +484,7 @@ bnode_parse_msg(msg_t *msg)
 	LOG_DEBUG("msg len:%ld\n", msg->len);
 
 	bn = read_bnode(p);
-#if (DEBUG >= LOG_LEVEL_INFO)
+#if (DEBUG >= LOG_LEVEL_DEBUG)
 	bnode_print(bn, 0);
 #endif
 	return bn;
@@ -574,7 +574,7 @@ bnode_print(bnode_t *bn, int indent)
 			break;
 		case BNODE_BINARY:
 			printf("%s  content: binary(%d):\n", pad, bn->len);
-#ifdef DEBUG
+#if (DEBUG >= LOG_LEVEL_DEBUG)
 			hexdump(bn->data.bytes, bn->len);
 #endif
 			break;

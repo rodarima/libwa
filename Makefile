@@ -6,7 +6,7 @@ LIB_CFLAGS=$(CFLAGS) -shared
 INSTALL_DIR=/usr
 
 FILES = $(wildcard *.c)
-OBJS = $(subst .c,.o,$(FILES))
+OBJS = pmsg.pb-c.o $(subst .c,.o,$(FILES))
 
 all: wac libwa.so
 
