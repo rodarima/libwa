@@ -4,7 +4,7 @@
 #include "wa.h"
 #include "l4.h"
 
-#define DEBUG 1
+#define DEBUG LOG_LEVEL_ERR
 
 #include "log.h"
 
@@ -25,7 +25,7 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	remote = session_find_user(wa, key->remotejid);
 	if(!remote)
 	{
-		LOG_ERR("Remote jid not found: %s\n", key->remotejid);
+		LOG_WARN("Remote jid not found: %s\n", key->remotejid);
 		return -1;
 	}
 

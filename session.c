@@ -1,12 +1,15 @@
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_WARN
 #include "log.h"
 #include "wa.h"
 #include "qr.h"
 
 #include <assert.h>
 #include <string.h>
+
+/* TODO: Choose a proper file to store the JSON session */
+#define SESSION_FILE "session.json"
 
 int
 session_update_user(wa_t *w, user_t *u)
@@ -95,8 +98,46 @@ generate_qr_data(wa_t *wa)
 int
 session_restore(wa_t *wa)
 {
-	return 1;
+	json_object *root, *v;
 
+	root = json_object_from_file(SESSION_FILE);
+
+	if(!root)
+		return -1;
+
+	v = json_object_object_get(root, "client_token");
+	wa->client_token = strdup(json_object_get_string(v));
+	v = json_object_object_get(root, "server_token");
+	wa->server_token = strdup(json_object_get_string(v));
+	v = json_object_object_get(root, "browser_token");
+	wa->browser_token = strdup(json_object_get_string(v));
+	v = json_object_object_get(root, "client_id");
+	wa->client_id = strdup(json_object_get_string(v));
+
+	v = json_object_object_get(root, "crypto");
+	crypto_restore(wa->c, v);
+
+	return 0;
+}
+
+int
+session_save(wa_t *wa)
+{
+	json_object *root, *v;
+	root = json_object_new_object();
+	v = json_object_new_string(wa->client_token);
+	json_object_object_add(root, "client_token", v);
+	v = json_object_new_string(wa->server_token);
+	json_object_object_add(root, "server_token", v);
+	v = json_object_new_string(wa->browser_token);
+	json_object_object_add(root, "browser_token", v);
+	v = json_object_new_string(wa->client_id);
+	json_object_object_add(root, "client_id", v);
+
+	v = crypto_save(wa->c);
+	json_object_object_add(root, "crypto", v);
+
+	json_object_to_file(SESSION_FILE, root);
 	return 0;
 }
 

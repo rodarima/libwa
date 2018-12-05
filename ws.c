@@ -203,9 +203,6 @@ ws_send_pkt(ws_t *ws, packet_t *pkt)
 {
 	int sent;
 
-	fprintf(stderr, "%s: sending %ld bytes\n", __func__, pkt->total);
-	LOG_DEBUG("Trying to acquire mutex ws->send_lock\n");
-
 	pthread_mutex_lock(ws->send_lock);
 
 	lws_cancel_service(ws->ctx);

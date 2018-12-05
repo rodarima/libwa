@@ -15,6 +15,8 @@
 
 #define WA_STATE_LOGGING	0
 #define WA_STATE_LOGGED_IN	1
+#define WA_STATE_WAIT_CHALLENGE	2
+#define WA_STATE_SENT_CHALLENGE	3
 
 typedef struct
 {

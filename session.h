@@ -20,4 +20,7 @@ int
 session_restore(wa_t *wa);
 
 int
+session_save(wa_t *wa);
+
+int
 session_new(wa_t *wa);

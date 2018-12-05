@@ -5,10 +5,10 @@
 
 #include "wa.h"
 #include "ws.h"
-#include "buf.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_WARN
 #include "log.h"
+#include "buf.h"
 
 static msg_t *
 packet_to_msg(packet_t *pkt)
@@ -108,7 +108,7 @@ ms_to_timespec(int ms, struct timespec *ts)
 static int
 dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 {
-	reply_t *pending, *unsol;
+	reply_t *pending, *unsol, *ptr;
 
 	pthread_mutex_lock(&d->lock);
 
@@ -142,6 +142,9 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 		unsol->msg = msg;
 
 		HASH_ADD_KEYPTR(hh, d->u, msg->tag, strlen(msg->tag), unsol);
+		LOG_INFO("Added msg tag:%s to unsol queue\n", msg->tag);
+		HASH_FIND_STR(d->u, msg->tag, ptr);
+		LOG_INFO("Found %p when searching for %p in unsol queue\n", ptr, unsol);
 		pthread_cond_signal(&d->event);
 	}
 
@@ -162,9 +165,12 @@ dispatch_recv_packet(packet_t *pkt, void *user)
 	if(!msg)
 	{
 		LOG_INFO("Ignoring packet:\n");
-		hexdump((const unsigned char *) pkt->buf, pkt->total);
+		LOG_HEXDUMP((const unsigned char *) pkt->buf, pkt->total);
 		return 0;
 	}
+
+	LOG_INFO("Received packet:\n");
+	LOG_HEXDUMP((const unsigned char *) pkt->buf, pkt->total);
 
 	if (dispatch_recv_msg(d, msg))
 	{
@@ -186,6 +192,9 @@ dispatch_send_msg(dispatcher_t *d, const msg_t *msg)
 	size_t sent;
 	packet_t *pkt = msg_to_packet(msg);
 	assert(pkt);
+
+	LOG_INFO("Sending packet:\n");
+	LOG_HEXDUMP((const unsigned char *) pkt->end, pkt->total);
 
 	sent = ws_send_pkt(d->ws, pkt);
 

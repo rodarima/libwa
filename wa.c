@@ -79,6 +79,34 @@ action_init(wa_t *wa)
 }
 
 
+static int
+action_takeover(wa_t *wa)
+{
+	msg_t *msg;
+	size_t len;
+
+	msg = malloc(sizeof(*msg));
+
+	len = asprintf((char **) &msg->cmd,
+		"[\"admin\",\"login\",\"%s\",\"%s\",\"%s\",\"takeover\"]",
+		wa->client_token,
+		wa->server_token,
+		wa->client_id);
+
+	msg->tag = strdup("login-001");
+	msg->len = len;
+
+	wa->state = WA_STATE_WAIT_CHALLENGE;
+
+	if(dispatch_send_msg(wa->d, msg))
+		return -1;
+
+	free(msg->tag);
+	free(msg->cmd);
+	free(msg);
+
+	return 0;
+}
 
 
 
@@ -126,25 +154,44 @@ wa_free(wa_t *w)
 int
 wa_login(wa_t *wa)
 {
-	wa->client_id = crypto_generate_client_id();
-	if(action_init(wa))
-	{
-		LOG_ERR("%s: init failed, aborting login\n",
-			       __func__);
 
-		return -1;
-	}
-
-	if(session_restore(wa))
+	if(session_restore(wa) != 0)
 	{
+		LOG_INFO("Issuing a new session, restore failed\n");
+
+		/* New session */
+
+		wa->client_id = crypto_generate_client_id();
+		if(action_init(wa))
+		{
+			LOG_ERR("%s: init failed, aborting login\n",
+				       __func__);
+
+			return -1;
+		}
+
 		LOG_ERR("%s: requesting a new session\n",
 			       __func__);
 
 		session_new(wa);
 	}
+	else
+	{
+		/* Use the restored session */
+		LOG_INFO("Restoring session\n");
 
+		if(action_init(wa))
+		{
+			LOG_ERR("%s: init failed, aborting login\n",
+				       __func__);
 
-	LOG_INFO("%s: logged in\n", __func__);
+			return -1;
+		}
+
+		LOG_INFO("Sending takeover\n");
+		action_takeover(wa);
+	}
+
 
 	return 0;
 }

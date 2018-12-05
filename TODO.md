@@ -1,2 +1,1 @@
-- Save/restore session
 - Send messages

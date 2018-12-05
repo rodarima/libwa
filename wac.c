@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include "wa.h"
-#include "session.h" /* XXX: This should disappear */
 
 int
 cb_priv_msg(void *ptr, priv_msg_t *msg)

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <json-c/json.h>
 #include <openssl/evp.h>
+
 #include "buf.h"
 #include "msg.h"
 
@@ -17,7 +19,7 @@ crypto_t *
 crypto_init();
 
 char *
-crypto_b64_encode(char* buf, size_t len);
+crypto_b64_encode(unsigned char* buf, size_t len);
 
 buf_t *
 crypto_b64_decode(const char *str);
@@ -36,3 +38,12 @@ crypto_generate_client_id();
 
 char *
 crypto_get_pub_client(crypto_t *c);
+
+json_object *
+crypto_save(crypto_t *c);
+
+int
+crypto_restore(crypto_t *c, json_object *root);
+
+char *
+crypto_solve_challenge(crypto_t *c, const char *challenge_b64);

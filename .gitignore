@@ -4,3 +4,4 @@ wac
 test/
 *.pb-c.c
 *.pb-c.h
+*.json

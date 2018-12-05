@@ -19,3 +19,4 @@ buf_hexdump(buf_t *buf);
 
 void
 hexdump(const unsigned char *buf, const size_t len);
+
