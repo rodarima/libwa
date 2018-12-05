@@ -1,3 +1,2 @@
-- Keep alive
 - Save/restore session
 - Send messages
