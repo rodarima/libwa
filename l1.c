@@ -10,14 +10,14 @@
 #include "wa.h"
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_WARN
+#define DEBUG LOG_LEVEL_INFO
 
 #include "log.h"
 
 static int
 l1_recv_msg_bin(wa_t *wa, msg_t *msg_l1)
 {
-	LOG_INFO("RECV BIN: tag:%s len:%lu\n",
+	LOG_DEBUG("RECV BIN: tag:%s len:%lu\n",
 			msg_l1->tag, msg_l1->len);
 
 	return l2_recv_msg(wa, msg_l1);
@@ -90,8 +90,10 @@ l1_recv_conn(wa_t *wa, struct json_object *array)
 static int
 l1_send_challenge(wa_t *wa, const char *solution)
 {
-	msg_t *msg;
+	msg_t *msg, *res;
 	size_t len;
+	json_object *j, *v;
+	int status;
 
 	msg = malloc(sizeof(*msg));
 
@@ -106,8 +108,28 @@ l1_send_challenge(wa_t *wa, const char *solution)
 
 	wa->state = WA_STATE_SENT_CHALLENGE;
 
-	if(dispatch_send_msg(wa->d, msg))
+	res = dispatch_request(wa->d, msg);
+
+	j = json_tokener_parse(res->cmd);
+	v = json_object_object_get(j, "status");
+
+	assert(v);
+
+	status = (int) json_object_get_int64(v);
+
+	if(status != 200)
+	{
+		LOG_ERR("Challenge failed with status %d\n", status);
 		return -1;
+	}
+
+	json_object_put(j);
+
+	wa->state = WA_STATE_LOGGED_IN;
+
+	free(res->tag);
+	free(res->cmd);
+	free(res);
 
 	free(msg->tag);
 	free(msg->cmd);
