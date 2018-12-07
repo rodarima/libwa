@@ -1,7 +1,8 @@
 wac
 *.o
 *.so
-test/
+priv/
 *.pb-c.c
 *.pb-c.h
 *.json
+*.d

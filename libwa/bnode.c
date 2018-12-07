@@ -609,4 +609,3 @@ bnode_print_msg(msg_t *msg)
 //
 //	return 0;
 //}
-
