@@ -5,7 +5,6 @@
 #include "bnode.h"
 #include "msg.h"
 #include "crypto.h"
-#include "test/msg.h"
 
 #define DEBUG LOG_LEVEL_INFO
 
@@ -598,6 +597,7 @@ bnode_print_msg(msg_t *msg)
 	return bnode_print(bn, 0);
 }
 
+//#include "test/msg.h"
 //int
 //main()
 //{
