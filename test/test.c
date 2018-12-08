@@ -5,6 +5,9 @@
 #include "bnode.h"
 #include "buf.h"
 
+#define DEBUG LOG_LEVEL_INFO
+#include "log.h"
+
 int
 test_bnode()
 {
@@ -15,7 +18,7 @@ test_bnode()
 	buf_t *buf;
 
 	b = malloc(sizeof(bnode_t));
-	b->desc = "Test";
+	b->desc = strdup("Test");
 
 	j = json_object_new_object();
 
@@ -27,7 +30,7 @@ test_bnode()
 
 	b->attr = j;
 	b->type = BNODE_BINARY;
-	b->data.bytes = (unsigned char *) bin;
+	b->data.bytes = (unsigned char *) strdup(bin);
 	b->len = len;
 
 	buf = bnode_to_buf(b);
@@ -35,6 +38,10 @@ test_bnode()
 	b2 = bnode_from_buf(buf);
 	bnode_print(b, 0);
 	bnode_print(b2, 0);
+
+	buf_free(buf);
+	bnode_free(b);
+	bnode_free(b2);
 
 	return 0;
 }

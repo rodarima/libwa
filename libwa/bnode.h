@@ -43,4 +43,7 @@ bnode_from_buf(const buf_t *buf);
 buf_t *
 bnode_to_buf(bnode_t *b);
 
+void
+bnode_free(bnode_t *b);
+
 #endif

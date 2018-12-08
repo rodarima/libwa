@@ -325,6 +325,8 @@ bnode_to_buf(bnode_t *b)
 	/* Finally: fill the buffer with the bnode */
 	bnode_compile(p, b);
 
+	free(p);
+
 	return buf;
 }
 
@@ -547,6 +549,8 @@ read_attr(parser_t *p, int len)
 		LOG_DEBUG("attr %s : %s\n", key, val);
 		val_json = json_object_new_string(val);
 		json_object_object_add(obj, key, val_json);
+		free(key);
+		free(val);
 	}
 
 	return obj;
@@ -668,6 +672,25 @@ parse_content(parser_t *p, bnode_t *bn, int tag)
 	return -2;
 }
 
+void
+bnode_free(bnode_t *b)
+{
+	if(b->desc)
+		free(b->desc);
+
+	if(b->attr)
+	{
+		json_object_put(b->attr);
+	}
+
+	if(b->type == BNODE_BINARY)
+	{
+		free(b->data.bytes);
+	}
+
+	free(b);
+}
+
 bnode_t *
 read_bnode(parser_t *p)
 {
@@ -722,6 +745,8 @@ bnode_from_buf(const buf_t *buf)
 #if (DEBUG >= LOG_LEVEL_DEBUG)
 	bnode_print(bn, 0);
 #endif
+	free(p);
+
 	return bn;
 }
 
