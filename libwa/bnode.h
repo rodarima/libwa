@@ -4,6 +4,7 @@
 #include <json-c/json.h>
 
 #include "msg.h"
+#include "buf.h"
 
 enum bnode_type {
 	BNODE_EMPTY = 0,
@@ -31,10 +32,15 @@ struct bnode_t {
 
 typedef struct bnode_t bnode_t;
 
+//int
+//bnode_print_msg(msg_t *msg);
 int
-bnode_print_msg(msg_t *msg);
+bnode_print(bnode_t *bn, int indent);
 
 bnode_t *
-bnode_parse_msg(msg_t *msg);
+bnode_from_buf(const buf_t *buf);
+
+buf_t *
+bnode_to_buf(bnode_t *b);
 
 #endif

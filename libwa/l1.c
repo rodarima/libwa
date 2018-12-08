@@ -135,6 +135,9 @@ l1_send_challenge(wa_t *wa, const char *solution)
 	free(msg->cmd);
 	free(msg);
 
+	/* XXX Remove me, only for profiling */
+	wa->run = 0;
+
 	return 0;
 }
 

@@ -360,6 +360,7 @@ dispatch_end(dispatcher_t *d)
 {
 	fprintf(stderr, "Waiting for WS to finish...\n");
 	/* TODO: Avoid entering ws struct from here, use ws_stop() */
+	d->ws->interrupted = 1;
 	pthread_join(d->ws->worker, NULL);
 	return 0;
 }

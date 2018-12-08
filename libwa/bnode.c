@@ -68,6 +68,7 @@ typedef struct {
 	unsigned char *start;
 	unsigned char *ptr;
 	unsigned char *end;
+	size_t len;
 } parser_t;
 
 char nibble_table[] = {
@@ -91,6 +92,241 @@ read_string(parser_t *p, int tag);
 
 int
 bnode_print(bnode_t *bn, int indent);
+
+
+
+
+
+
+
+int
+write_byte(parser_t *p, size_t byte)
+{
+	if(p->start)
+		*p->ptr++ = byte;
+	else
+		p->len++;
+
+	return 0;
+}
+
+int
+write_binary_buf(parser_t *p, const unsigned char *buf, size_t len)
+{
+	if(p->start)
+	{
+		memcpy(p->ptr, buf, len);
+		p->ptr += len;
+	}
+	else
+	{
+		p->len += len;
+	}
+
+	return 0;
+}
+
+int
+write_int(parser_t *p, size_t len, size_t v)
+{
+	/* Always big endian */
+
+	int i;
+
+	assert((0 < len) && (len <= 4));
+
+	if(!p->start)
+	{
+		p->len += len;
+		return 0;
+	}
+
+	assert(p->ptr + len <= p->end);
+
+	for(i=0; i < len; i++)
+	{
+		p->ptr[len-1-i] = v & 0xFF;
+		v = v >> 8;
+	}
+
+	p->ptr += len;
+
+	return 0;
+}
+
+int
+write_int32(parser_t *p, size_t v)
+{
+	return write_int(p, 4, v);
+}
+
+int
+write_int20(parser_t *p, size_t v)
+{
+	return write_int(p, 3, v & 0x0FFFFF);
+}
+
+int
+write_int16(parser_t *p, size_t v)
+{
+	return write_int(p, 2, v);
+}
+
+int
+write_binary_len(parser_t *p, size_t len)
+{
+	if(len >= (1<<20))
+	{
+		write_byte(p, TAG_BINARY_32);
+		write_int32(p, len);
+	}
+	else if(len >= (1<<8))
+	{
+		write_byte(p, TAG_BINARY_20);
+		write_int20(p, len);
+	}
+	else
+	{
+		write_byte(p, TAG_BINARY_8);
+		write_byte(p, len);
+	}
+
+	return 0;
+}
+
+int
+write_binary(parser_t *p, const unsigned char *buf, size_t len)
+{
+	/* Writes the following:
+	 * [binary tag] [len] [buf]
+	 */
+
+	write_binary_len(p, len);
+	write_binary_buf(p, buf, len);
+	return 0;
+}
+
+int
+write_string(parser_t *p, const char *s)
+{
+	size_t len;
+
+	len = strlen(s);
+	write_binary(p, (unsigned char *) s, len);
+	return 0;
+}
+
+int
+write_list_head(parser_t *p, size_t len)
+{
+	if(len == 0)
+	{
+		write_byte(p, TAG_LIST_EMPTY);
+	}
+	else if (len < 256)
+	{
+		write_byte(p, TAG_LIST_8);
+		write_int(p, 1, len);
+	}
+	else
+	{
+		write_byte(p, TAG_LIST_16);
+		write_int(p, 2, len);
+	}
+	return 0;
+}
+
+int
+write_attr(parser_t *p, json_object *attr)
+{
+	const char *val;
+
+	json_object_object_foreach(attr, key, val_obj)
+	{
+		val = json_object_get_string(val_obj);
+		write_string(p, key);
+		write_string(p, val);
+	}
+
+	return 0;
+}
+
+int
+write_content(parser_t *p, bnode_t *b)
+{
+	switch(b->type)
+	{
+		case BNODE_EMPTY:
+			return 0;
+		case BNODE_STRING:
+		case BNODE_INT:
+		case BNODE_LIST:
+			LOG_ERR("Writting content '%s' not supported yet\n",
+					bnode_type_str[b->type]);
+			abort();
+			return -1;
+		case BNODE_BINARY:
+			write_binary(p, b->data.bytes, b->len);
+			return 0;
+		default:
+			LOG_ERR("Unknown type '%s'\n",
+					bnode_type_str[b->type]);
+			abort();
+			return -1;
+
+	}
+
+	return -1;
+}
+
+static int
+bnode_compile(parser_t *p, bnode_t *b)
+{
+	size_t size;
+
+	/* The description */
+	size = 1;
+	/* Attributes */
+	size += 2 * json_object_object_length(b->attr);
+	/* Content */
+	size += (b->type == BNODE_EMPTY) ? 0 : 1;
+
+	write_list_head(p, size);
+
+	write_string(p, b->desc);
+
+	write_attr(p, b->attr);
+
+	if(b->type != BNODE_EMPTY)
+		write_content(p, b);
+
+	return 0;
+}
+
+
+buf_t *
+bnode_to_buf(bnode_t *b)
+{
+	parser_t *p;
+	buf_t *buf;
+
+	p = calloc(1, sizeof(parser_t));
+
+	/* First step: Compute the length of the bnode */
+	bnode_compile(p, b);
+
+	/* Second step: Alloc the exact memory */
+	LOG_INFO("Computed length is %lu bytes\n", p->len);
+	buf = buf_init(p->len);
+	p->start = buf->ptr;
+	p->ptr = p->start;
+	p->end = p->start + p->len;
+
+	/* Finally: fill the buffer with the bnode */
+	bnode_compile(p, b);
+
+	return buf;
+}
 
 
 
@@ -471,16 +707,16 @@ read_bnode(parser_t *p)
 }
 
 bnode_t *
-bnode_parse_msg(msg_t *msg)
+bnode_from_buf(const buf_t *buf)
 {
 	parser_t *p;
 	bnode_t *bn;
 
 	p = malloc(sizeof(parser_t));
-	p->start = msg->cmd;
+	p->start = buf->ptr;
 	p->ptr = p->start;
-	p->end = p->start + msg->len;
-	LOG_DEBUG("msg len:%ld\n", msg->len);
+	p->end = p->start + buf->len;
+	LOG_DEBUG("bnode buf len:%ld\n", buf->len);
 
 	bn = read_bnode(p);
 #if (DEBUG >= LOG_LEVEL_DEBUG)
@@ -589,14 +825,14 @@ bnode_print(bnode_t *bn, int indent)
 	return 0;
 }
 
-int
-bnode_print_msg(msg_t *msg)
-{
-	bnode_t *bn = bnode_parse_msg(msg);
-
-	return bnode_print(bn, 0);
-}
-
+//int
+//bnode_print_msg(msg_t *msg)
+//{
+//	bnode_t *bn = bnode_parse_msg(msg);
+//
+//	return bnode_print(bn, 0);
+//}
+//
 //#include "test/msg.h"
 //int
 //main()

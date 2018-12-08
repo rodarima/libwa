@@ -183,10 +183,19 @@ l3_recv_bnode(wa_t *wa, bnode_t *bn)
 }
 
 int
-l3_recv_msg(wa_t *wa, msg_t *msg_l2)
+l3_recv_msg(wa_t *wa, msg_t *msg)
 {
 	bnode_t *bn_l3;
-	bn_l3 = bnode_parse_msg(msg_l2);
+	buf_t *buf;
+
+	buf = malloc(sizeof(buf_t));
+	assert(buf);
+	buf->ptr = msg->cmd;
+	buf->len = msg->len;
+
+	bn_l3 = bnode_from_buf(buf);
+
+	free(buf);
 
 	return l3_recv_bnode(wa, bn_l3);
 }

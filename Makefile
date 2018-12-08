@@ -1,7 +1,12 @@
+#CC := gcc
 CC := clang
-MODULES := libwa client
+MODULES := libwa client test
 
-CFLAGS=-g -Wall -Werror -fPIC
+CFLAGS=-g -Wall -Werror -fPIC -I/usr/include
+
+# Search dynamic libraries in the current path
+#LDFLAGS = -Wl,-rpath="\$$ORIGIN"
+LDFLAGS = -Wl,-rpath="."
 
 INSTALL_DIR=/usr
 
@@ -27,7 +32,7 @@ include $(OBJ:.o=.d)
 
 # calculate C include dependencies
 %.d: %.c
-	$(CC) -MM -MG $(CFLAGS) $*.c \
+	gcc -MM -MG $(CFLAGS) $*.c \
 	| sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
 all: $(BIN)
