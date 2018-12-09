@@ -14,9 +14,7 @@ l3_recv_contact(wa_t *wa, bnode_t *bn)
 {
 	json_object *j;
 	user_t *u;
-
-	u = malloc(sizeof(user_t));
-	assert(u);
+	char *jid, *notify, *name;
 
 	if(!bn->desc)
 		return 1;
@@ -31,20 +29,27 @@ l3_recv_contact(wa_t *wa, bnode_t *bn)
 	if(!j)
 		return 1;
 
-	u->jid = strdup(json_object_get_string(j));
+	jid = strdup(json_object_get_string(j));
 
 	j = json_object_object_get(bn->attr, "short");
 	if(!j)
 		return 1;
 
-	u->notify = strdup(json_object_get_string(j));
+	notify = strdup(json_object_get_string(j));
 
 	j = json_object_object_get(bn->attr, "name");
 	if(!j)
 		return 1;
 
-	u->name = strdup(json_object_get_string(j));
+	name = strdup(json_object_get_string(j));
 
+	u = malloc(sizeof(user_t));
+	assert(u);
+	u->name = name;
+	u->notify = notify;
+	u->jid = jid;
+
+	/* FIXME: The user u is freed inside session_update_user */
 	session_update_user(wa, u);
 
 	return 0;
@@ -187,6 +192,7 @@ l3_recv_msg(wa_t *wa, msg_t *msg)
 {
 	bnode_t *bn_l3;
 	buf_t *buf;
+	int ret;
 
 	buf = malloc(sizeof(buf_t));
 	assert(buf);
@@ -197,5 +203,9 @@ l3_recv_msg(wa_t *wa, msg_t *msg)
 
 	free(buf);
 
-	return l3_recv_bnode(wa, bn_l3);
+	ret = l3_recv_bnode(wa, bn_l3);
+
+	bnode_free(bn_l3);
+
+	return ret;
 }

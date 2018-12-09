@@ -675,6 +675,8 @@ parse_content(parser_t *p, bnode_t *bn, int tag)
 void
 bnode_free(bnode_t *b)
 {
+	int i;
+
 	if(b->desc)
 		free(b->desc);
 
@@ -683,9 +685,21 @@ bnode_free(bnode_t *b)
 		json_object_put(b->attr);
 	}
 
-	if(b->type == BNODE_BINARY)
+	switch(b->type)
 	{
-		free(b->data.bytes);
+		case BNODE_STRING:
+			free(b->data.str);
+			break;
+		case BNODE_BINARY:
+			free(b->data.bytes);
+			break;
+		case BNODE_LIST:
+			for(i=0; i < b->len; i++)
+				bnode_free(b->data.list[i]);
+			free(b->data.list);
+			break;
+		default:
+			break;
 	}
 
 	free(b);

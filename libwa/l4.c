@@ -15,9 +15,7 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	Proto__Message *msg;
 	priv_msg_t *pm;
 	user_t *remote;
-
-	pm = malloc(sizeof(priv_msg_t));
-	assert(pm);
+	int ret;
 
 	key = wmi->key;
 	assert(key);
@@ -37,6 +35,9 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 		return -1;
 	}
 
+	pm = malloc(sizeof(priv_msg_t));
+	assert(pm);
+
 	pm->text = msg->conversation;
 
 	assert(key->has_fromme);
@@ -54,7 +55,11 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 				pm->from->name, pm->text);
 	}
 
-	return session_recv_priv_msg(wa, pm);
+	ret = session_recv_priv_msg(wa, pm);
+
+	free(pm);
+
+	return ret;
 }
 
 static int

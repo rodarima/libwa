@@ -34,6 +34,7 @@ session_update_user(wa_t *w, user_t *u)
 		f->name = u->name;
 		f->notify = u->notify;
 		f->jid = u->jid;
+		free(u);
 	}
 	else
 	{
@@ -116,6 +117,8 @@ session_restore(wa_t *wa)
 
 	v = json_object_object_get(root, "crypto");
 	crypto_restore(wa->c, v);
+
+	json_object_put(root);
 
 	return 0;
 }

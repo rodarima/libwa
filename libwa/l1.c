@@ -136,7 +136,7 @@ l1_send_challenge(wa_t *wa, const char *solution)
 	free(msg);
 
 	/* XXX Remove me, only for profiling */
-	wa->run = 0;
+	//wa->run = 0;
 
 	return 0;
 }
@@ -222,16 +222,23 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 
 	struct json_tokener *tok = json_tokener_new();
 	struct json_object *jo = json_tokener_parse_ex(tok, msg->cmd, msg->len);
+	int ret, offset;
+
+	offset = tok->char_offset;
+
+	json_tokener_free(tok);
 
 	if(!jo)
 	{
 		return l1_recv_msg_bin(wa, msg);
 	}
 
-	if(tok->char_offset != msg->len)
+	if(offset != msg->len)
 	{
 		LOG_INFO("Partial json detected. char_offset=%d, len=%ld\n",
-				tok->char_offset, msg->len);
+				offset, msg->len);
+
+		json_object_put(jo);
 
 		return l1_recv_msg_bin(wa, msg);
 	}
@@ -240,10 +247,14 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 
 	if(json_object_is_type(jo, json_type_array))
 	{
-		return l1_recv_json_array(wa, jo);
+		ret = l1_recv_json_array(wa, jo);
+		json_object_put(jo);
+
+		return ret;
 	}
 
 	LOG_ERR("Unknown json msg received\n");
+	json_object_put(jo);
 	return 0;
 }
 

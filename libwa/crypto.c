@@ -296,6 +296,8 @@ decrypt_keys(const buf_t *secret, const buf_t *ekey)
 	free(dec);
 	free(enc);
 
+	EVP_CIPHER_CTX_free(ctx);
+
 	return decrypted;
 }
 
@@ -405,6 +407,8 @@ crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 	dmsg->tag = strdup(msg->tag);
 	dmsg->cmd = dec_msg;
 	dmsg->len = dec_msg_len;
+
+	EVP_CIPHER_CTX_free(ctx);
 
 	return dmsg;
 }

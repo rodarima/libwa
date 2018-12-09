@@ -208,6 +208,9 @@ wa_loop(wa_t *wa)
 		if(!msg) continue;
 
 		l1_recv_msg(wa, msg);
+		free(msg->tag);
+		free(msg->cmd);
+		free(msg);
 	}
 
 	dispatch_end(wa->d);

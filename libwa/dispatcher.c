@@ -228,7 +228,7 @@ dispatch_queue_tag(dispatcher_t *d, const char *tag)
 	r = malloc(sizeof(reply_t));
 	assert(r);
 
-	r->tag = strdup(tag);
+	r->tag = tag;
 	assert(r->tag);
 	r->msg = NULL;
 
