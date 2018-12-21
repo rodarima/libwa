@@ -1,9 +1,16 @@
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <json-c/json.h>
+
+#include "l2.h"
 #include "l3.h"
 
 #include "wa.h"
 #include "bnode.h"
 #include "session.h"
 #include "l4.h"
+
+#define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
 
 int
@@ -206,6 +213,48 @@ l3_recv_msg(wa_t *wa, msg_t *msg)
 	ret = l3_recv_bnode(wa, bn_l3);
 
 	bnode_free(bn_l3);
+
+	return ret;
+}
+
+int
+l3_send_relay(wa_t *wa, buf_t *buf)
+{
+	bnode_t *b;
+	int ret;
+	buf_t *out;
+	char *msg_counter;
+
+	b = malloc(sizeof(bnode_t));
+	assert(b);
+
+	b->desc = strdup("action");
+	b->attr = json_object_new_object();
+
+	json_object_object_add(b->attr, "type",
+			json_object_new_string("relay"));
+
+	asprintf(&msg_counter, "%d", wa->msg_counter);
+	json_object_object_add(b->attr, "epoch",
+			json_object_new_string(msg_counter));
+
+	b->type = BNODE_BINARY;
+	b->data.bytes = buf->ptr;
+	b->len = buf->len;
+
+	bnode_print(b, 0);
+
+	out = bnode_to_buf(b);
+
+	/* TODO: Send to layer 2, in order to cipher the msg */
+	LOG_ERR("Sending to l2:\n");
+	buf_hexdump(out);
+	ret = l2_send_buf(wa, out);
+
+	free(b);
+	/*free(buf); Not here */
+	free(out);
+	free(msg_counter);
 
 	return ret;
 }

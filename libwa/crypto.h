@@ -47,3 +47,9 @@ crypto_restore(crypto_t *c, json_object *root);
 
 char *
 crypto_solve_challenge(crypto_t *c, const char *challenge_b64);
+
+buf_t *
+crypto_encrypt_buf(crypto_t *c, buf_t *in);
+
+buf_t *
+crypto_decrypt_buf(crypto_t *c, buf_t *in);

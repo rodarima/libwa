@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include <json-c/json.h>
 
 #include "bnode.h"
+#include "crypto.h"
 #include "buf.h"
 
 #define DEBUG LOG_LEVEL_INFO
@@ -46,8 +48,43 @@ test_bnode()
 	return 0;
 }
 
+int
+test_encrypt()
+{
+	int ret = 0;
+	crypto_t *c = malloc(sizeof(*c));
+	buf_t *in, *out, *dec, *enc_key;
+	char *data = "Esto es una prueba de información que será cifrada y, quizás, "
+		"descifrada con éxito";
+
+	in = buf_init(strlen(data) + 1);
+	strcpy((char *) in->ptr, data);
+
+	enc_key = buf_init(32);
+	memset(enc_key->ptr, 0x01, 32);
+	c->enc_key = enc_key;
+	c->mac_key = enc_key;
+
+	out = crypto_encrypt_buf(c, in);
+	dec = crypto_decrypt_buf(c, out);
+
+	/* TODO: HMAC */
+
+	ret |= (dec->len != in->len);
+	ret |= memcmp(data, dec->ptr, dec->len) ? 1 : 0;
+
+	buf_free(out);
+	buf_free(in);
+	buf_free(dec);
+	buf_free(enc_key);
+	free(c);
+
+	return ret;
+}
+
 int main()
 {
 	test_bnode();
+	assert(!test_encrypt());
 	return 0;
 }

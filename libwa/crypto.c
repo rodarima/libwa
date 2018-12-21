@@ -17,6 +17,9 @@
 #define DEBUG LOG_LEVEL_INFO
 #define CLIENT_ID_BYTES 16
 
+#define LEN_SIGNATURE 32
+#define LEN_IV 16
+
 #define TEST_KEYS 0
 
 #include "log.h"
@@ -379,6 +382,8 @@ crypto_update_secret(crypto_t *c, const char *b64_secret)
 msg_t *
 crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 {
+	/* TODO: Remove this function, and use _buf instead */
+
 	/*unsigned char *hmac_sum = msg->cmd;*/
 	unsigned char *iv = msg->cmd + 32;
 	unsigned char *enc_msg = msg->cmd + 32 + 16;
@@ -413,6 +418,93 @@ crypto_decrypt_msg(crypto_t *c, msg_t *msg)
 	return dmsg;
 }
 
+buf_t *
+crypto_decrypt_buf(crypto_t *c, buf_t *in)
+{
+	unsigned char *iv = in->ptr + 32;
+	unsigned char *enc_msg = in->ptr + 32 + 16;
+
+	int enc_msg_len = in->len - (32 + 16);
+	int dec_msg_len = enc_msg_len + 32;
+	int final_len = 0;
+	buf_t *out = buf_init(dec_msg_len);
+	buf_t *sum = buf_init(LEN_SIGNATURE);
+	unsigned int sum_len = 0;
+	buf_t *key = c->mac_key;
+
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, c->enc_key->ptr, iv);
+	EVP_DecryptUpdate(ctx, out->ptr, &dec_msg_len, enc_msg, enc_msg_len);
+	EVP_DecryptFinal_ex(ctx, out->ptr + dec_msg_len, &final_len);
+	dec_msg_len += final_len;
+
+	/* We shrink the out buffer to ignore the unused extra room */
+	out->len = dec_msg_len;
+
+	LOG_DEBUG("MSG DECRYPTED:\n");
+	LOG_HEXDUMP(out->ptr, dec_msg_len);
+
+	/* Verify the signature */
+	HMAC(EVP_sha256(),
+		key->ptr, key->len,
+		in->ptr + LEN_SIGNATURE, in->len - LEN_SIGNATURE,
+		sum->ptr, &sum_len);
+
+	assert(!memcmp(sum->ptr, in->ptr, sum->len));
+
+	EVP_CIPHER_CTX_free(ctx);
+	buf_free(sum);
+
+	return out;
+}
+
+buf_t *
+crypto_encrypt_buf(crypto_t *c, buf_t *in)
+{
+	buf_t *key = c->mac_key;
+	size_t padding = LEN_SIGNATURE + LEN_IV;
+	size_t out_len = in->len + padding;
+	int enc_bytes = 0, final_bytes = 0, extra_room = 32;
+	unsigned int hmac_bytes = 0;
+
+	buf_t *out = buf_init(out_len + extra_room);
+	unsigned char *iv = out->ptr + LEN_SIGNATURE;
+	unsigned char *enc = out->ptr + padding;
+
+
+	/* Set the IV */
+	if(RAND_bytes(iv, LEN_IV) <= 0)
+	{
+		buf_free(out);
+		return NULL;
+	}
+
+	/* Set the encrypted message */
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, c->enc_key->ptr, iv);
+	EVP_EncryptUpdate(ctx, enc, &enc_bytes, in->ptr, in->len);
+	EVP_EncryptFinal_ex(ctx, enc + enc_bytes, &final_bytes);
+	enc_bytes += final_bytes;
+
+	assert(enc_bytes <= out_len + extra_room - padding);
+
+	/* We shrink the out buffer to ignore the unused extra room */
+	out->len = padding + enc_bytes;
+
+
+	/* Set the HMAC signature. */
+	HMAC(EVP_sha256(),
+			key->ptr, key->len,
+			out->ptr + LEN_SIGNATURE, out->len - LEN_SIGNATURE,
+			out->ptr, &hmac_bytes);
+
+	LOG_DEBUG("MSG ENCRYPTED:\n");
+	LOG_HEXDUMP_BUF(out);
+
+	EVP_CIPHER_CTX_free(ctx);
+
+	return out;
+}
 
 char *
 crypto_generate_client_id()

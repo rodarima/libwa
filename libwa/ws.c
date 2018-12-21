@@ -62,7 +62,7 @@ int
 callback(struct lws* wsi, enum lws_callback_reasons reason, void *user,
 		void* in, size_t len)
 {
-	//printf("Callback called. Reason %d\n", reason);
+	LOG_DEBUG("Callback called. Reason %d\n", reason);
 	ws_t *ws = (ws_t *) user;
 	size_t remaining;
 
@@ -106,8 +106,8 @@ static struct lws_protocols protocols[] =
 int ws_connect(ws_t *ws)
 {
 	lws_set_log_level(LLL_ERR | LLL_WARN, NULL);
-	//lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO |
-	//		LLL_DEBUG | LLL_HEADER | LLL_CLIENT, NULL);
+	lws_set_log_level(LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO |
+			LLL_DEBUG | LLL_HEADER | LLL_CLIENT, NULL);
 
 	struct lws_context_creation_info params;
 	struct lws_client_connect_info info;
@@ -119,6 +119,7 @@ int ws_connect(ws_t *ws)
 	params.protocols = protocols;
 	params.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT |
 		LWS_SERVER_OPTION_JUST_USE_RAW_ORIGIN;
+	//params.client_ssl_ca_filepath = "/home/ram/dev/whatsapp/libwa/certs/DigiCert_High_Assurance_EV_Root_CA.pem";
 
 	ws->ctx = lws_create_context(&params);
 	if (!ws->ctx) return 1;
@@ -133,7 +134,8 @@ int ws_connect(ws_t *ws)
 
 #else
 
-	info.ssl_connection = LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED;
+	info.ssl_connection = LCCSCF_USE_SSL;
+	//| LCCSCF_ALLOW_SELFSIGNED;
 	info.host = "w1.web.whatsapp.com";
 	info.port = 443;
 #endif

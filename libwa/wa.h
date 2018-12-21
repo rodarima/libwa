@@ -68,6 +68,8 @@ typedef struct
 	int run;
 	int state;
 	time_t keep_alive_next;
+	int msg_counter;
+	int tag_counter;
 	dispatcher_t *d;
 	crypto_t *c;
 	cb_t *cb;
@@ -88,3 +90,10 @@ wa_loop(wa_t *w);
 
 msg_t *
 wa_request(wa_t *wa, msg_t *msg);
+
+int
+wa_send_priv_msg(wa_t *wa, char *to_jid, char *text);
+
+
+void
+wa_dispatch(wa_t *wa, int ms);

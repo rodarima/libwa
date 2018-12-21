@@ -6,7 +6,7 @@
 #include "wa.h"
 #include "ws.h"
 
-#define DEBUG LOG_LEVEL_WARN
+#define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
 #include "buf.h"
 

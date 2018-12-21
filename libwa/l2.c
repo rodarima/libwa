@@ -3,6 +3,7 @@
 #include "log.h"
 #include "crypto.h"
 
+#include "l1.h"
 #include "l2.h"
 #include "l3.h"
 
@@ -23,6 +24,21 @@ l2_recv_msg(wa_t *wa, msg_t *msg_l1)
 	free(msg_l2->tag);
 	free(msg_l2->cmd);
 	free(msg_l2);
+
+	return ret;
+}
+
+int
+l2_send_buf(wa_t *wa, buf_t *in)
+{
+	int ret = 0;
+	buf_t *out;
+
+	out = crypto_encrypt_buf(wa->c, in);
+
+	ret = l1_send_buf(wa, out);
+
+	buf_free(out);
 
 	return ret;
 }

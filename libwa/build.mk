@@ -12,5 +12,8 @@ $(module)/pmsg.pb-c.c: $(module)/pmsg.proto
 libwa.so: $(obj)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(libs)
 
+libwa.a: $(obj)
+	ar rcs $@ $^
+
 SRC += $(src)
-BIN += libwa.so
+BIN += libwa.so libwa.a

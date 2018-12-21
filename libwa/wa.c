@@ -9,6 +9,7 @@
 #include "bnode.h"
 #include "session.h"
 #include "l1.h"
+#include "l4.h"
 
 #define DEBUG LOG_LEVEL_INFO
 #include "log.h"
@@ -132,6 +133,7 @@ wa_init(cb_t *cb)
 
 	wa->cb = cb;
 
+	wa->msg_counter = 1;
 	wa->users = NULL;
 	wa->me = malloc(sizeof(user_t));
 	assert(wa->me);
@@ -214,4 +216,28 @@ wa_loop(wa_t *wa)
 	}
 
 	dispatch_end(wa->d);
+}
+
+void
+wa_dispatch(wa_t *wa, int ms)
+{
+	msg_t *msg;
+
+	if(wa->run)
+	{
+		l1_send_keep_alive(wa);
+		msg = dispatch_wait_event(wa->d, ms);
+		if(!msg) return;
+
+		l1_recv_msg(wa, msg);
+		free(msg->tag);
+		free(msg->cmd);
+		free(msg);
+	}
+}
+
+int
+wa_send_priv_msg(wa_t *wa, char *to_jid, char *text)
+{
+	return l4_send_priv_msg(wa, to_jid, text);
 }

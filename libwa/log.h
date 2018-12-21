@@ -12,8 +12,15 @@
 #ifdef DEBUG
 
  #define _LOG_MSG(level, format, ... ) \
- 	fprintf(stderr, "%s %s(%d) " format, level, __FUNCTION__,  __LINE__, \
- 			##__VA_ARGS__ )
+	do { \
+		struct timespec log_time; \
+		clock_gettime(CLOCK_REALTIME, &log_time); \
+		fprintf(stderr, "%s %lu %ld %s(%d) " format, \
+				level, \
+				log_time.tv_sec, log_time.tv_nsec, \
+				__FUNCTION__,  __LINE__, \
+				##__VA_ARGS__ ); \
+	} while (0);
  
  #if (DEBUG >= LOG_LEVEL_DEBUG)
   #define LOG_DEBUG(format, ... ) \

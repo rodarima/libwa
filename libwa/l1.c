@@ -298,3 +298,29 @@ l1_send_keep_alive(wa_t *wa)
 
 	return 0;
 }
+
+int
+l1_send_buf(wa_t *wa, buf_t *in)
+{
+	msg_t *msg;
+	struct timespec tp;
+
+	msg = malloc(sizeof(msg_t));
+
+	/* Msg Key Id ? */
+
+	clock_gettime(CLOCK_REALTIME, &tp);
+	asprintf(&msg->tag, "%ld.--%d", tp.tv_sec, wa->tag_counter++);
+
+	/* We set the buffer as-is: no memcpy involved */
+	msg->cmd = in->ptr;
+	msg->len = in->len;
+
+	if(dispatch_send_msg(wa->d, msg))
+		return -1;
+
+	free(msg->tag);
+	free(msg);
+
+	return 0;
+}
