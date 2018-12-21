@@ -7,3 +7,4 @@ priv/
 *.pb-c.h
 *.json
 *.d
+*.a
