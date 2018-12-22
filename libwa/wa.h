@@ -70,6 +70,7 @@ typedef struct
 	time_t keep_alive_next;
 	int msg_counter;
 	int tag_counter;
+	time_t login_time;
 	dispatcher_t *d;
 	crypto_t *c;
 	cb_t *cb;

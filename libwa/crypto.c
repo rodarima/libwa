@@ -521,6 +521,21 @@ crypto_generate_client_id()
 	return client_id;
 }
 
+buf_t *
+crypto_random_buf(size_t n)
+{
+	/* XXX: Should this be moved out of crypto? */
+	buf_t *buf = buf_init(n);
+
+	if(RAND_bytes(buf->ptr, n) <= 0)
+	{
+		free(buf);
+		return NULL;
+	}
+
+	return buf;
+}
+
 char *
 crypto_get_pub_client(crypto_t *c)
 {

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <json-c/json.h>
 
+#include "l1.h" /* For metric and flag... FIXME */
 #include "l2.h"
 #include "l3.h"
 
@@ -10,7 +11,7 @@
 #include "session.h"
 #include "l4.h"
 
-#define DEBUG LOG_LEVEL_DEBUG
+#define DEBUG LOG_LEVEL_INFO
 #include "log.h"
 
 int
@@ -128,6 +129,8 @@ l3_recv_action(wa_t *wa, bnode_t *bn)
 int
 l3_recv_message(wa_t *wa, bnode_t *bn)
 {
+	//LOG_INFO("Received msg bnode:\n");
+	//bnode_print(bn, 0);
 	return l4_recv_msg(wa, bn->data.bytes, bn->len);
 }
 
@@ -218,7 +221,7 @@ l3_recv_msg(wa_t *wa, msg_t *msg)
 }
 
 int
-l3_send_relay(wa_t *wa, buf_t *buf)
+l3_send_relay(wa_t *wa, bnode_t *child, char *tag)
 {
 	bnode_t *b;
 	int ret;
@@ -238,9 +241,11 @@ l3_send_relay(wa_t *wa, buf_t *buf)
 	json_object_object_add(b->attr, "epoch",
 			json_object_new_string(msg_counter));
 
-	b->type = BNODE_BINARY;
-	b->data.bytes = buf->ptr;
-	b->len = buf->len;
+	b->type = BNODE_LIST;
+	b->data.list = (bnode_t **) malloc(sizeof(bnode_t *) * 1);
+	b->len = 1;
+
+	b->data.list[0] = child;
 
 	bnode_print(b, 0);
 
@@ -249,12 +254,35 @@ l3_send_relay(wa_t *wa, buf_t *buf)
 	/* TODO: Send to layer 2, in order to cipher the msg */
 	LOG_ERR("Sending to l2:\n");
 	buf_hexdump(out);
-	ret = l2_send_buf(wa, out);
+	ret = l2_send_buf(wa, out, tag, METRIC_MESSAGE, FLAG_IGNORE);
 
 	free(b);
 	/*free(buf); Not here */
 	free(out);
 	free(msg_counter);
+
+	return ret;
+}
+
+int
+l3_send_relay_msg(wa_t *wa, buf_t *buf, char *tag)
+{
+	bnode_t *b;
+	int ret;
+
+	b = malloc(sizeof(bnode_t));
+	assert(b);
+
+	b->desc = strdup("message");
+	b->attr = NULL;
+
+	b->type = BNODE_BINARY;
+	b->data.bytes = buf->ptr;
+	b->len = buf->len;
+
+	ret = l3_send_relay(wa, b, tag);
+
+	free(b);
 
 	return ret;
 }

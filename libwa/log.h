@@ -4,6 +4,8 @@
 /* Note that multiple inclusion of this header is allowed. This lead to the
  * ability to set DEBUG per c file */
 
+#define SHOW_FUNCTION 0
+
 #define LOG_LEVEL_ERR	1
 #define LOG_LEVEL_WARN	2
 #define LOG_LEVEL_INFO	3
@@ -11,16 +13,33 @@
 
 #ifdef DEBUG
 
- #define _LOG_MSG(level, format, ... ) \
-	do { \
-		struct timespec log_time; \
-		clock_gettime(CLOCK_REALTIME, &log_time); \
-		fprintf(stderr, "%s %lu %ld %s(%d) " format, \
-				level, \
-				log_time.tv_sec, log_time.tv_nsec, \
-				__FUNCTION__,  __LINE__, \
-				##__VA_ARGS__ ); \
-	} while (0);
+// #define _LOG_MSG(level, format, ... ) \
+//	do { \
+//		struct timespec log_time; \
+//		clock_gettime(CLOCK_REALTIME, &log_time); \
+//		fprintf(stderr, "%s %lu %ld %s(%d) " format, \
+//				level, \
+//				log_time.tv_sec, log_time.tv_nsec, \
+//				__FUNCTION__,  __LINE__, \
+//				##__VA_ARGS__ ); \
+//	} while (0);
+
+ #if SHOW_FUNCTION
+  #define _LOG_MSG(level, format, ... ) \
+ 	do { \
+ 		fprintf(stderr, "%s %s:%d " format, \
+ 				level, \
+ 				__FUNCTION__,  __LINE__, \
+ 				##__VA_ARGS__ ); \
+ 	} while (0);
+ #else
+  #define _LOG_MSG(level, format, ... ) \
+ 	do { \
+ 		fprintf(stderr, "%s " format, \
+ 				level, \
+ 				##__VA_ARGS__ ); \
+ 	} while (0);
+ #endif
  
  #if (DEBUG >= LOG_LEVEL_DEBUG)
   #define LOG_DEBUG(format, ... ) \
@@ -40,7 +59,7 @@
  
  #if (DEBUG >= LOG_LEVEL_WARN)
   #define LOG_WARN(format, ... ) \
- 	_LOG_MSG("II", format, ##__VA_ARGS__ )
+ 	_LOG_MSG("WW", format, ##__VA_ARGS__ )
  #else
   #define LOG_WARN(format, ... )
  #endif
@@ -48,7 +67,7 @@
  
  #if (DEBUG >= LOG_LEVEL_ERR)
   #define LOG_ERR(format, ... ) \
- 	_LOG_MSG("II", format, ##__VA_ARGS__ )
+ 	_LOG_MSG("EE", format, ##__VA_ARGS__ )
  #else
   #define LOG_ERR(format, ... )
  #endif

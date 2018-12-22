@@ -10,15 +10,23 @@
 #include "wa.h"
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_DEBUG
 
 #include "log.h"
+
 
 static int
 l1_recv_msg_bin(wa_t *wa, msg_t *msg_l1)
 {
 	LOG_DEBUG("RECV BIN: tag:%s len:%lu\n",
 			msg_l1->tag, msg_l1->len);
+
+	if(msg_l1->len == 0)
+	{
+		LOG_INFO("Empty msg with tag:%s, ignoring\n",
+			msg_l1->tag);
+		return 0;
+	}
 
 	return l2_recv_msg(wa, msg_l1);
 }
@@ -103,12 +111,13 @@ l1_send_challenge(wa_t *wa, const char *solution)
 		wa->server_token,
 		wa->client_id);
 
-	msg->tag = strdup("challenge-001");
+	//msg->tag = strdup("challenge-001");
+	asprintf(&msg->tag, "%ld.--%d", wa->login_time, wa->tag_counter++);
 	msg->len = len;
 
 	wa->state = WA_STATE_SENT_CHALLENGE;
 
-	res = dispatch_request(wa->d, msg);
+	res = dispatch_request(wa->d, msg, 0);
 
 	j = json_tokener_parse(res->cmd);
 	v = json_object_object_get(j, "status");
@@ -243,7 +252,7 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 		return l1_recv_msg_bin(wa, msg);
 	}
 
-	LOG_WARN("JSON RECV: %s\n", ((char *) msg->cmd));
+	LOG_DEBUG("JSON RECV: %s\n", ((char *) msg->cmd));
 
 	if(json_object_is_type(jo, json_type_array))
 	{
@@ -253,7 +262,7 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 		return ret;
 	}
 
-	LOG_ERR("Unknown json msg received\n");
+	LOG_ERR("Unknown json msg received: tag:%s cmd:%s\n", msg->tag, msg->cmd);
 	json_object_put(jo);
 	return 0;
 }
@@ -269,7 +278,8 @@ l1_send_keep_alive(wa_t *wa)
 
 	struct timespec ts;
 	msg_t *msg;
-	int r, rmin = 20, rmax = 90;
+	//int r, rmin = 20, rmax = 90;
+	int r, rmin = 10, rmax = 30;
 
 	if(wa->state != WA_STATE_LOGGED_IN)
 		return 0;
@@ -279,7 +289,15 @@ l1_send_keep_alive(wa_t *wa)
 	if(wa->keep_alive_next > ts.tv_sec)
 		return 0;
 
-	LOG_INFO("Sending keep alive\n");
+	r = rmin + (rand() % (rmax - rmin));
+
+	if(wa->keep_alive_next == 0)
+	{
+		wa->keep_alive_next = ts.tv_sec + r;
+		return 0;
+	}
+
+	LOG_DEBUG("Sending keep alive\n");
 
 	msg = malloc(sizeof(msg_t));
 	assert(msg);
@@ -288,39 +306,97 @@ l1_send_keep_alive(wa_t *wa)
 	msg->cmd = ",";
 	msg->len = 1;
 
-	if(dispatch_send_msg(wa->d, msg))
+	if(dispatch_send_msg(wa->d, msg, 0))
 		return -1;
 
 	free(msg);
 
-	r = rmin + (rand() % (rmax - rmin));
 	wa->keep_alive_next = ts.tv_sec + r;
+
+	/* XXX: Remove me */
+	//l1_presence_suscribe(wa);
 
 	return 0;
 }
 
 int
-l1_send_buf(wa_t *wa, buf_t *in)
+l1_presence_suscribe(wa_t *wa, char *jid)
 {
-	msg_t *msg;
-	struct timespec tp;
+	msg_t *msg, *res;
 
 	msg = malloc(sizeof(msg_t));
 
-	/* Msg Key Id ? */
+	asprintf(&msg->tag, "%ld.--%d", wa->login_time % 1000, wa->tag_counter++);
+	asprintf((char **) &msg->cmd, ",[\"action\",\"presence\",\"subscribe\",\"%s\"]", jid);
+	msg->len = strlen(msg->cmd);
 
-	clock_gettime(CLOCK_REALTIME, &tp);
-	asprintf(&msg->tag, "%ld.--%d", tp.tv_sec, wa->tag_counter++);
+	res = dispatch_request(wa->d, msg, 0);
 
-	/* We set the buffer as-is: no memcpy involved */
-	msg->cmd = in->ptr;
-	msg->len = in->len;
-
-	if(dispatch_send_msg(wa->d, msg))
+	if(!res)
 		return -1;
 
+	free(res->cmd);
+	free(res->tag);
+	free(res);
 	free(msg->tag);
+	free(msg->cmd);
 	free(msg);
+
+	return 0;
+}
+
+int
+l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag)
+{
+	unsigned char *tmp;
+	size_t len;
+	msg_t *msg, *res;
+
+	msg = malloc(sizeof(msg_t));
+
+	/* They seem to be using the last 3 digits of the first timestamp used,
+	 * as of version 0.3.1846 (2018-12-21) */
+
+	if(!tag)
+		asprintf(&msg->tag, "%ld.--%d", wa->login_time % 1000, wa->tag_counter++);
+	else
+		msg->tag = tag;
+
+
+	/* TODO: Better design for metric and flag */
+
+	len = in->len + 2;
+	tmp = malloc(len);
+
+	tmp[0] = metric;
+	tmp[1] = flag;
+
+	memcpy(&tmp[2], in->ptr, in->len);
+
+	msg->cmd = tmp;
+	msg->len = len;
+
+	/* Block until ack */
+	res = dispatch_request(wa->d, msg, 1);
+
+	if(!res)
+	{
+		free(msg);
+		free(tmp);
+		return -1;
+	}
+
+	/* A test to see if we can parse our own msg */
+	//LOG_INFO("Reading our sent msg back\n");
+	//l1_recv_msg(wa, msg);
+
+	if(!tag)
+		free(msg->tag);
+
+	//free(res->tag); Needed? FIXME
+	free(res);
+	free(msg);
+	free(tmp);
 
 	return 0;
 }

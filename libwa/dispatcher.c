@@ -115,10 +115,10 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 	/* Find a matching tag in pending queue fist */
 	HASH_FIND_STR(d->q, msg->tag, pending);
 
-	if(pending)
+	if(pending && !pending->msg)
 	{
 		/* A matching tag was found, save in the proper place */
-		fprintf(stderr, "MATCH tag:%s\n", msg->tag);
+		LOG_INFO("MATCH tag:%s\n", msg->tag);
 		pending->msg = msg;
 		pthread_cond_signal(&d->event);
 		/* Don't free msg, the other thread is still waiting on
@@ -126,13 +126,18 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 	}
 	else
 	{
+		/* In case we have pending->msg not NULL, is a duplicate */
+		if(pending && pending->msg)
+			LOG_WARN("Duplicate tag:%s received, sending to unsol queue\n",
+				pending->msg->tag);
+
 		/* Seems like an unsolicited msg arrived */
 		HASH_FIND_STR(d->u, msg->tag, unsol);
 
 		/* Ensure no other tag already in the unsolicited queue */
 		if(unsol)
 		{
-			fprintf(stderr, "DUP tag:%s\n", msg->tag);
+			LOG_INFO("DUP tag:%s\n", msg->tag);
 			return 1;
 		}
 
@@ -144,7 +149,6 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 		HASH_ADD_KEYPTR(hh, d->u, msg->tag, strlen(msg->tag), unsol);
 		LOG_INFO("Added msg tag:%s to unsol queue\n", msg->tag);
 		HASH_FIND_STR(d->u, msg->tag, ptr);
-		LOG_INFO("Found %p when searching for %p in unsol queue\n", ptr, unsol);
 		pthread_cond_signal(&d->event);
 	}
 
@@ -175,7 +179,7 @@ dispatch_recv_packet(packet_t *pkt, void *user)
 	if (dispatch_recv_msg(d, msg))
 	{
 		/* Message not wanted */
-		fprintf(stderr, "DROP tag:%s\n", msg->tag);
+		LOG_INFO("DROP tag:%s\n", msg->tag);
 
 		/* Free */
 		free(msg->tag);
@@ -187,7 +191,7 @@ dispatch_recv_packet(packet_t *pkt, void *user)
 }
 
 int
-dispatch_send_msg(dispatcher_t *d, const msg_t *msg)
+dispatch_send_msg(dispatcher_t *d, const msg_t *msg, int is_bin)
 {
 	size_t sent;
 	packet_t *pkt = msg_to_packet(msg);
@@ -196,7 +200,7 @@ dispatch_send_msg(dispatcher_t *d, const msg_t *msg)
 	LOG_INFO("Sending packet:\n");
 	LOG_HEXDUMP((const unsigned char *) pkt->end, pkt->total);
 
-	sent = ws_send_pkt(d->ws, pkt);
+	sent = ws_send_pkt(d->ws, pkt, is_bin);
 
 	free(pkt->buf);
 
@@ -279,14 +283,14 @@ dispatch_wait_reply(dispatcher_t *d, const char *tag)
 }
 
 msg_t *
-dispatch_request(dispatcher_t *d, const msg_t *msg)
+dispatch_request(dispatcher_t *d, const msg_t *msg, int is_bin)
 {
 	if(dispatch_queue_tag(d, msg->tag))
 	{
 		return NULL;
 	}
 
-	if(dispatch_send_msg(d, msg))
+	if(dispatch_send_msg(d, msg, is_bin))
 	{
 		/* TODO: Unqueue tag */
 		return NULL;
@@ -358,7 +362,7 @@ dispatch_wait_event(dispatcher_t *d, int ms)
 int
 dispatch_end(dispatcher_t *d)
 {
-	fprintf(stderr, "Waiting for WS to finish...\n");
+	LOG_INFO("Waiting for WS to finish...\n");
 	/* TODO: Avoid entering ws struct from here, use ws_stop() */
 	d->ws->interrupted = 1;
 	pthread_join(d->ws->worker, NULL);

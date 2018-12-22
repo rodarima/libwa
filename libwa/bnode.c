@@ -93,6 +93,8 @@ read_string(parser_t *p, int tag);
 int
 bnode_print(bnode_t *bn, int indent);
 
+static int
+bnode_compile(parser_t *p, bnode_t *b);
 
 
 
@@ -252,6 +254,21 @@ write_attr(parser_t *p, json_object *attr)
 }
 
 int
+write_bnode_list(parser_t *p, bnode_t **list, size_t len)
+{
+	int i;
+
+	write_list_head(p, len);
+
+	for(i=0; i<len; i++)
+	{
+		bnode_compile(p, list[i]);
+	}
+
+	return 0;
+}
+
+int
 write_content(parser_t *p, bnode_t *b)
 {
 	switch(b->type)
@@ -261,10 +278,8 @@ write_content(parser_t *p, bnode_t *b)
 		case BNODE_STRING:
 		case BNODE_INT:
 		case BNODE_LIST:
-			LOG_ERR("Writting content '%s' not supported yet\n",
-					bnode_type_str[b->type]);
-			abort();
-			return -1;
+			write_bnode_list(p, b->data.list, b->len);
+			return 0;
 		case BNODE_BINARY:
 			write_binary(p, b->data.bytes, b->len);
 			return 0;
@@ -287,7 +302,8 @@ bnode_compile(parser_t *p, bnode_t *b)
 	/* The description */
 	size = 1;
 	/* Attributes */
-	size += 2 * json_object_object_length(b->attr);
+	if(b->attr)
+		size += 2 * json_object_object_length(b->attr);
 	/* Content */
 	size += (b->type == BNODE_EMPTY) ? 0 : 1;
 
@@ -295,7 +311,8 @@ bnode_compile(parser_t *p, bnode_t *b)
 
 	write_string(p, b->desc);
 
-	write_attr(p, b->attr);
+	if(b->attr)
+		write_attr(p, b->attr);
 
 	if(b->type != BNODE_EMPTY)
 		write_content(p, b);

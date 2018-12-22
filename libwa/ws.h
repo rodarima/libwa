@@ -26,15 +26,17 @@ typedef struct
 
 	int interrupted;
 	int connected;
+	int can_write;
 
 	pthread_mutex_t *send_lock;
+	pthread_cond_t *ready;
 	pthread_t worker;
 } ws_t;
 
 ws_t *ws_init();
 int ws_start(ws_t *ws);
-int ws_send_buf(ws_t *ws, char *buf, size_t len);
 void ws_register_recv_cb(ws_t *ws, int (*fn)(packet_t *, void *), void *user);
-int ws_send_pkt(ws_t *ws, packet_t *pkt);
+int ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin);
+int ws_send_pkt(ws_t *ws, packet_t *pkt, int is_bin);
 
 #endif

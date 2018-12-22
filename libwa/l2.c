@@ -29,14 +29,14 @@ l2_recv_msg(wa_t *wa, msg_t *msg_l1)
 }
 
 int
-l2_send_buf(wa_t *wa, buf_t *in)
+l2_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flags)
 {
 	int ret = 0;
 	buf_t *out;
 
 	out = crypto_encrypt_buf(wa->c, in);
 
-	ret = l1_send_buf(wa, out);
+	ret = l1_send_buf(wa, out, tag, metric, flags);
 
 	buf_free(out);
 

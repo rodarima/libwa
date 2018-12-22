@@ -47,10 +47,10 @@ int
 dispatch_events(dispatcher_t *d);
 
 int
-dispatch_send_msg(dispatcher_t *d, const msg_t *msg);
+dispatch_send_msg(dispatcher_t *d, const msg_t *msg, int is_bin);
 
 msg_t *
-dispatch_request(dispatcher_t *d, const msg_t *msg);
+dispatch_request(dispatcher_t *d, const msg_t *msg, int is_bin);
 
 int
 dispatch_queue_tag(dispatcher_t *d, const char *tag);

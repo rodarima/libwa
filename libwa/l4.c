@@ -5,9 +5,11 @@
 #include "l4.h"
 #include "l3.h"
 
-#define DEBUG LOG_LEVEL_ERR
+#define DEBUG LOG_LEVEL_INFO
 
 #include "log.h"
+
+#define LEN_MSG_KEY 10
 
 static int
 parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
@@ -24,7 +26,15 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	remote = session_find_user(wa, key->remotejid);
 	if(!remote)
 	{
-		LOG_WARN("Remote jid not found: %s\n", key->remotejid);
+		if(wmi->message && wmi->message->conversation)
+		{
+			LOG_WARN("Remote jid not found: %s said : %s\n",
+				key->remotejid, wmi->message->conversation);
+		}
+		else
+		{
+			LOG_WARN("Remote jid not found: %s\n", key->remotejid);
+		}
 		return -1;
 	}
 
@@ -104,6 +114,36 @@ l4_recv_msg(wa_t *wa, unsigned char *buf, size_t len)
 	return ret;
 }
 
+char *
+random_key()
+{
+	char *l = "0123456789ABCDEF";
+	buf_t *buf;
+	int i, j = 0, b;
+	char *key = malloc(LEN_MSG_KEY*2 + 1);
+
+	buf = crypto_random_buf(LEN_MSG_KEY);
+
+	for(i=0; i < LEN_MSG_KEY; i++)
+	{
+		/* Note the nibbles are swapped here, but we don't care */
+		b = buf->ptr[i];
+		key[j++] = l[b & 0x0F];
+		b = b >> 4;
+		key[j++] = l[b & 0x0F];
+	}
+
+	key[j] = '\0';
+
+	buf_free(buf);
+
+	/* The first part is always the same. Note we don't truncate the key */
+	char *head = "3EB0";
+	memcpy(key, head, strlen(head));
+
+	return key;
+}
+
 int
 send_priv_msg(wa_t *wa, priv_msg_t *pm)
 {
@@ -132,8 +172,8 @@ send_priv_msg(wa_t *wa, priv_msg_t *pm)
 
 	key->remotejid = pm->to->jid;
 
-	/* TODO: Set real random key */
-	key->id = "3EB02E178F06CD180E80";
+	key->id = random_key();
+	LOG_INFO("Random key is set to: %s\n", key->id);
 
 	wmi->has_messagetimestamp = 1;
 	wmi->messagetimestamp = tp.tv_sec;
@@ -150,11 +190,14 @@ send_priv_msg(wa_t *wa, priv_msg_t *pm)
 
 	proto__web_message_info__pack(wmi, buf->ptr);
 
-	l3_send_relay(wa, buf);
+	l3_send_relay_msg(wa, buf, key->id);
+
+	free(key->id);
 
 	free(msg);
 	free(key);
 	free(wmi);
+
 
 	buf_free(buf);
 

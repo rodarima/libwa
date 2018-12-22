@@ -53,3 +53,6 @@ crypto_encrypt_buf(crypto_t *c, buf_t *in);
 
 buf_t *
 crypto_decrypt_buf(crypto_t *c, buf_t *in);
+
+buf_t *
+crypto_random_buf(size_t n);

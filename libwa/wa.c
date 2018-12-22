@@ -14,13 +14,14 @@
 #define DEBUG LOG_LEVEL_INFO
 #include "log.h"
 
-#define WA_WEB_VERSION "[0,3,1242]"
+#define WA_WEB_VERSION "[0,3,1846]"
 #define WA_WEB_CLIENT "[\"libwa\",\"Chromium\"]"
 
 
 static int
 action_init(wa_t *wa)
 {
+	struct timespec tp;
 	msg_t *msg, *res;
 	int len;
 	const char *ref;
@@ -38,17 +39,16 @@ action_init(wa_t *wa)
 		"[\"admin\",\"init\",%s,%s,\"%s\",true]",
 		WA_WEB_VERSION, WA_WEB_CLIENT, wa->client_id);
 
-	msg->tag = strdup("init-001");
+
+	clock_gettime(CLOCK_REALTIME, &tp);
+	wa->login_time = tp.tv_sec;
+
+	asprintf(&msg->tag, "%ld.--%d", wa->login_time, wa->tag_counter++);
 	msg->len = len;
 
-	res = dispatch_request(wa->d, msg);
+	res = dispatch_request(wa->d, msg, 0);
 
 	LOG_INFO("Received cmd:%s\n", (char *) res->cmd);
-
-	/* FIXME: The response is NOT null terminated, so the tokenizer reads
-	 * outside the buffer */
-
-	assert(((char *) res->cmd)[res->len] == '\0');
 
 	jo = json_tokener_parse(res->cmd);
 
@@ -94,12 +94,12 @@ action_takeover(wa_t *wa)
 		wa->server_token,
 		wa->client_id);
 
-	msg->tag = strdup("login-001");
+	asprintf(&msg->tag, "%ld.--%d", wa->login_time, wa->tag_counter++);
 	msg->len = len;
 
 	wa->state = WA_STATE_WAIT_CHALLENGE;
 
-	if(dispatch_send_msg(wa->d, msg))
+	if(dispatch_send_msg(wa->d, msg, 0))
 		return -1;
 
 	free(msg->tag);
@@ -239,5 +239,6 @@ wa_dispatch(wa_t *wa, int ms)
 int
 wa_send_priv_msg(wa_t *wa, char *to_jid, char *text)
 {
+	//return l1_presence_suscribe(wa);
 	return l4_send_priv_msg(wa, to_jid, text);
 }
