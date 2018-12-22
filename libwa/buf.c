@@ -36,30 +36,30 @@ hexdump(const unsigned char *buf, const size_t len)
 		{
 			int p = i*16 + j;
 			if(p < len)
-				printf("%02X ", (unsigned char) buf[p]);
+				fprintf(stderr, "%02X ", (unsigned char) buf[p]);
 			else
-				printf("   ");
+				fprintf(stderr, "   ");
 
 			if(j == 7)
-				printf(" ");
+				fprintf(stderr, " ");
 		}
-		printf("  ");
+		fprintf(stderr, "  ");
 		for(j=0; j<16; j++)
 		{
 			int p = i*16 + j;
 			if(p < len)
 			{
 				if(isprint(buf[p]))
-					printf("%c", buf[p]);
+					fprintf(stderr, "%c", buf[p]);
 				else
-					printf(".");
+					fprintf(stderr, ".");
 			}
 			else
 			{
 				break;
 			}
 		}
-		printf("\n");
+		fprintf(stderr, "\n");
 	}
 }
 

@@ -801,12 +801,12 @@ print_attr(bnode_t *bn, int indent)
 	it = json_object_iter_begin(obj);
 	it_end = json_object_iter_end(obj);
 
-	printf("%sattr:\n", pad);
-	printf("%s{\n", pad);
+	fprintf(stderr, "%sattr:\n", pad);
+	fprintf(stderr, "%s{\n", pad);
 
 	while (!json_object_iter_equal(&it, &it_end))
 	{
-		printf("%s  %s : %s\n",
+		fprintf(stderr, "%s  %s : %s\n",
 				pad,
 				json_object_iter_peek_name(&it),
 				json_object_get_string(
@@ -815,7 +815,7 @@ print_attr(bnode_t *bn, int indent)
 		json_object_iter_next(&it);
 	}
 
-	printf("%s}\n", pad);
+	fprintf(stderr, "%s}\n", pad);
 	free(pad);
 
 	return 0;
@@ -833,14 +833,14 @@ bnode_print(bnode_t *bn, int indent)
 	}
 	pad[indent] = '\0';
 
-	printf("%sBNODE\n", pad);
-	printf("%s{\n", pad);
+	fprintf(stderr, "%sBNODE\n", pad);
+	fprintf(stderr, "%s{\n", pad);
 
-	printf("%s  desc: %s\n", pad, bn->desc);
+	fprintf(stderr, "%s  desc: %s\n", pad, bn->desc);
 
 
 	type_str = bnode_type_str[bn->type];
-	printf("%s  type: %s\n", pad, type_str);
+	fprintf(stderr, "%s  type: %s\n", pad, type_str);
 
 	/* Print attrs here */
 
@@ -850,21 +850,21 @@ bnode_print(bnode_t *bn, int indent)
 	switch(bn->type)
 	{
 		case BNODE_EMPTY:
-			printf("%s  content: empty\n", pad);
+			fprintf(stderr, "%s  content: empty\n", pad);
 			break;
 		case BNODE_STRING:
-			printf("%s  content: %s\n", pad, bn->data.str);
+			fprintf(stderr, "%s  content: %s\n", pad, bn->data.str);
 			break;
 		case BNODE_LIST:
-			printf("%s  content\n", pad);
-			printf("%s  {\n", pad);
+			fprintf(stderr, "%s  content\n", pad);
+			fprintf(stderr, "%s  {\n", pad);
 			for(i=0; i < bn->len; i++)
 			{
 				bnode_print(bn->data.list[i], indent+4);
 			}
 			break;
 		case BNODE_BINARY:
-			printf("%s  content: binary(%d):\n", pad, bn->len);
+			fprintf(stderr, "%s  content: binary(%d):\n", pad, bn->len);
 #if (DEBUG >= LOG_LEVEL_DEBUG)
 			hexdump(bn->data.bytes, bn->len);
 #endif
@@ -874,7 +874,7 @@ bnode_print(bnode_t *bn, int indent)
 			return -1;
 	}
 
-	printf("%s}\n", pad);
+	fprintf(stderr, "%s}\n", pad);
 
 	free(pad);
 
