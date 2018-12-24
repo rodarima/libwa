@@ -29,6 +29,7 @@ typedef struct
 	int can_write;
 
 	pthread_mutex_t *send_lock;
+	pthread_mutex_t *service_lock;
 	pthread_cond_t *ready;
 	pthread_t worker;
 } ws_t;

@@ -91,9 +91,8 @@ callback(struct lws* wsi, enum lws_callback_reasons reason, void *user,
 			break;
 
 		case LWS_CALLBACK_CLIENT_WRITEABLE:
-			pthread_mutex_lock(ws->send_lock);
+			/* We are under ws->service_lock */
 			ws->can_write = 1;
-			pthread_mutex_unlock(ws->send_lock);
 			pthread_cond_signal(ws->ready);
 
 		default:
@@ -165,14 +164,6 @@ int ws_connect(ws_t *ws)
 	return 0;
 }
 
-int ws_loop(ws_t *ws)
-{
-	while (!ws->interrupted)
-		lws_service(ws->ctx, 50);
-
-	return 0;
-}
-
 void ws_free(ws_t *ws)
 {
 	ws->interrupted = 1;
@@ -196,11 +187,11 @@ void *ws_worker(void *arg)
 
 	while (!ws->interrupted)
 	{
-		//pthread_mutex_lock(ws->send_lock);
+		pthread_mutex_lock(ws->service_lock);
 		//LOG_DEBUG("Locked ws->send_lock\n");
 		lws_service(ws->ctx, 50);
 		//fprintf(stderr, "WS thread: alive!\n");
-		//pthread_mutex_unlock(ws->send_lock);
+		pthread_mutex_unlock(ws->service_lock);
 		//LOG_DEBUG("Unlocked ws->send_lock\n");
 	}
 
@@ -217,10 +208,16 @@ ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin)
 
 	pthread_mutex_lock(ws->send_lock);
 
+	/* We assume we can cancel a service from another thread, without any
+	 * synchronization needed */
 	lws_cancel_service(ws->ctx);
 
+	pthread_mutex_lock(ws->service_lock);
+
+	/* No more lws_service() allowed here */
+
 	while(!ws->can_write)
-		pthread_cond_wait(ws->ready, ws->send_lock);
+		pthread_cond_wait(ws->ready, ws->service_lock);
 
 	ws->can_write = 0;
 
@@ -230,6 +227,8 @@ ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin)
 
 	/* Request writ(e)able callback, to put "can_write" to one again*/
 	lws_callback_on_writable(ws->wsi);
+
+	pthread_mutex_unlock(ws->service_lock);
 
 	pthread_mutex_unlock(ws->send_lock);
 
@@ -263,6 +262,9 @@ ws_t *ws_init()
 
 	ws->send_lock = malloc(sizeof(pthread_mutex_t));
 	pthread_mutex_init(ws->send_lock, NULL);
+
+	ws->service_lock = malloc(sizeof(pthread_mutex_t));
+	pthread_mutex_init(ws->service_lock, NULL);
 
 	ws->ready = malloc(sizeof(pthread_cond_t));
 	pthread_cond_init(ws->ready, NULL);

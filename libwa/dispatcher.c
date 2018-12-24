@@ -6,7 +6,7 @@
 #include "wa.h"
 #include "ws.h"
 
-#define DEBUG LOG_LEVEL_WARN
+#define DEBUG LOG_LEVEL_INFO
 #include "log.h"
 #include "buf.h"
 
@@ -130,6 +130,7 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 			goto out;
 		}
 
+		LOG_INFO("Signaling cond for tag:%s\n", msg->tag);
 		pending->msg = msg;
 		pthread_cond_signal(&d->event);
 		/* Don't free msg, the other thread is still waiting on
@@ -282,6 +283,8 @@ dispatch_wait_reply(dispatcher_t *d, const char *tag)
 		if(reply && reply->msg)
 			break;
 
+		LOG_INFO("dispatch_wait_reply: Waiting for some reply event for tag:%s\n",
+			tag);
 		pthread_cond_wait(&d->event, &d->lock);
 	}
 

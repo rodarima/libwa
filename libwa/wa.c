@@ -11,7 +11,7 @@
 #include "l1.h"
 #include "l4.h"
 
-#define DEBUG LOG_LEVEL_ERR
+#define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
 
 #define WA_WEB_VERSION "[0,3,1846]"

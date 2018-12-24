@@ -40,7 +40,7 @@ all: $(BIN)
 install: $(BIN)
 	cp libwa.so $(INSTALL_DIR)/lib/
 	mkdir -p $(INSTALL_DIR)/include/libwa/
-	cp *.h $(INSTALL_DIR)/include/libwa/
+	cp libwa/*.h $(INSTALL_DIR)/include/libwa/
 
 clean:
 	rm -f $(OBJ) $(OBJ:.o=.d) $(BIN)
