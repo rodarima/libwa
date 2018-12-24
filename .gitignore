@@ -1,5 +1,6 @@
-wac
-test/test
+*
+!*.*
+!*/
 *.o
 *.so
 priv/
