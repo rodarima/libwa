@@ -10,7 +10,7 @@
 #include "wa.h"
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_WARN
+#define DEBUG LOG_LEVEL_ERR
 
 #include "log.h"
 
@@ -387,11 +387,11 @@ l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag)
 	 * empty reponse, so I can get a reliable return to the caller, assuming
 	 * the message was sent. */
 
-	LOG_ERR("L1: Sending message with tag:%s\n", msg->tag);
+	LOG_DEBUG("L1: Sending message with tag:%s\n", msg->tag);
 	/* Block until ack */
 	res = dispatch_request(wa->d, msg, 1);
 
-	LOG_ERR("L1: Message sent with tag:%s\n", msg->tag);
+	LOG_DEBUG("L1: Message sent with tag:%s\n", msg->tag);
 
 	if(!res)
 	{

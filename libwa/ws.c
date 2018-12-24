@@ -86,7 +86,7 @@ callback(struct lws* wsi, enum lws_callback_reasons reason, void *user,
 			break;
 
 		case LWS_CALLBACK_CLIENT_CLOSED:
-			LOG_ERR("Connection closed\n");
+			LOG_DEBUG("Connection closed\n");
 			ws->interrupted = 1;
 			break;
 
