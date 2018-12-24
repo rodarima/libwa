@@ -1,1 +1,3 @@
 - Fix layer 1 violation: metric and flag
+- Config file for session
+- Emojis lead to NULL pm text
