@@ -49,7 +49,7 @@ It can also be piped, as any UNIX like program, for example:
 Or to get a remote shell:
 
 	% mkfifo fifo
-	% wac < fifo | bash > fifo
+	% wac $PHONE < fifo | bash > fifo
 
 
 ![A screenshot of the test commands](doc/test.jpg)
