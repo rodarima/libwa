@@ -18,6 +18,9 @@ typedef struct {
 crypto_t *
 crypto_init();
 
+void
+crypto_free(crypto_t *c);
+
 char *
 crypto_b64_encode(unsigned char* buf, size_t len);
 

@@ -11,7 +11,7 @@
 #include "l1.h"
 #include "l4.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_ERR
 #include "log.h"
 
 #define WA_WEB_VERSION "[0,3,1846]"
@@ -150,6 +150,9 @@ wa_init(cb_t *cb)
 void
 wa_free(wa_t *w)
 {
+	w->run = 0;
+	dispatch_free(w->d);
+	crypto_free(w->c);
 	free(w);
 }
 
@@ -172,7 +175,7 @@ wa_login(wa_t *wa)
 			return -1;
 		}
 
-		LOG_ERR("%s: requesting a new session\n",
+		LOG_INFO("%s: requesting a new session\n",
 			       __func__);
 
 		session_new(wa);
@@ -192,6 +195,17 @@ wa_login(wa_t *wa)
 
 		LOG_INFO("Sending takeover\n");
 		action_takeover(wa);
+	}
+
+	while(wa->run)
+	{
+		if(wa->state == WA_STATE_LOGGED_IN)
+			return 0;
+
+		if(wa->state == WA_STATE_LOGIN_FAILED)
+			return -1;
+
+		wa_dispatch(wa, 50);
 	}
 
 
@@ -214,8 +228,6 @@ wa_loop(wa_t *wa)
 		free(msg->cmd);
 		free(msg);
 	}
-
-	dispatch_end(wa->d);
 }
 
 void

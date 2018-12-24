@@ -6,7 +6,7 @@
 #include "msg.h"
 #include "crypto.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_ERR
 
 #include "log.h"
 
@@ -333,7 +333,7 @@ bnode_to_buf(bnode_t *b)
 	bnode_compile(p, b);
 
 	/* Second step: Alloc the exact memory */
-	LOG_INFO("Computed length is %lu bytes\n", p->len);
+	LOG_DEBUG("Computed length is %lu bytes\n", p->len);
 	buf = buf_init(p->len);
 	p->start = buf->ptr;
 	p->ptr = p->start;

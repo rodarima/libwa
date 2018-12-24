@@ -6,7 +6,7 @@
 #include "wa.h"
 #include "ws.h"
 
-#define DEBUG LOG_LEVEL_DEBUG
+#define DEBUG LOG_LEVEL_WARN
 #include "log.h"
 #include "buf.h"
 
@@ -109,6 +109,7 @@ static int
 dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 {
 	reply_t *pending, *unsol, *ptr;
+	int ret = 0;
 
 	pthread_mutex_lock(&d->lock);
 
@@ -119,6 +120,16 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 	{
 		/* A matching tag was found, save in the proper place */
 		LOG_INFO("MATCH tag:%s\n", msg->tag);
+
+		/* If the cmd in the response is empty, we assume the message
+		 * was wrong, and still wait for the real response. */
+		if(msg->len == 0)
+		{
+			LOG_INFO("Ignoring empty msg with tag:%s\n", msg->tag);
+			ret = -1;
+			goto out;
+		}
+
 		pending->msg = msg;
 		pthread_cond_signal(&d->event);
 		/* Don't free msg, the other thread is still waiting on
@@ -138,7 +149,8 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 		if(unsol)
 		{
 			LOG_INFO("DUP tag:%s\n", msg->tag);
-			return 1;
+			ret = -1;
+			goto out;
 		}
 
 		unsol = malloc(sizeof(reply_t));
@@ -152,9 +164,11 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 		pthread_cond_signal(&d->event);
 	}
 
+out:
+
 	pthread_mutex_unlock(&d->lock);
 
-	return 0;
+	return ret;
 }
 
 static int
@@ -299,30 +313,6 @@ dispatch_request(dispatcher_t *d, const msg_t *msg, int is_bin)
 	return dispatch_wait_reply(d, msg->tag);
 }
 
-dispatcher_t *
-dispatch_init()
-{
-	dispatcher_t *d = malloc(sizeof(dispatcher_t));
-
-	/* Create a new websocket */
-	d->ws = ws_init();
-
-	pthread_cond_init(&d->event, NULL);
-	pthread_mutex_init(&d->lock, NULL);
-
-	/* Init hash tables */
-	d->q = NULL;
-	d->u = NULL;
-
-	/* Set the callback to recv in websocket */
-	ws_register_recv_cb(d->ws, dispatch_recv_packet, (void *) d);
-
-	/* And start the worker thread */
-	ws_start(d->ws);
-
-	return d;
-}
-
 msg_t *
 dispatch_wait_event(dispatcher_t *d, int ms)
 {
@@ -359,12 +349,39 @@ dispatch_wait_event(dispatcher_t *d, int ms)
 	return msg;
 }
 
+dispatcher_t *
+dispatch_init()
+{
+	dispatcher_t *d = malloc(sizeof(dispatcher_t));
+
+	/* Create a new websocket */
+	d->ws = ws_init();
+
+	pthread_cond_init(&d->event, NULL);
+	pthread_mutex_init(&d->lock, NULL);
+
+	/* Init hash tables */
+	d->q = NULL;
+	d->u = NULL;
+
+	/* Set the callback to recv in websocket */
+	ws_register_recv_cb(d->ws, dispatch_recv_packet, (void *) d);
+
+	/* And start the worker thread */
+	ws_start(d->ws);
+
+	return d;
+}
+
 int
-dispatch_end(dispatcher_t *d)
+dispatch_free(dispatcher_t *d)
 {
 	LOG_INFO("Waiting for WS to finish...\n");
-	/* TODO: Avoid entering ws struct from here, use ws_stop() */
-	d->ws->interrupted = 1;
-	pthread_join(d->ws->worker, NULL);
+	ws_free(d->ws);
+
+	/* TODO: Free hash tables */
+
+	free(d);
+
 	return 0;
 }

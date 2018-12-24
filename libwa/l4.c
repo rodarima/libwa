@@ -5,7 +5,7 @@
 #include "l4.h"
 #include "l3.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_ERR
 
 #include "log.h"
 
@@ -173,7 +173,7 @@ send_priv_msg(wa_t *wa, priv_msg_t *pm)
 	key->remotejid = pm->to->jid;
 
 	key->id = random_key();
-	LOG_INFO("Random key is set to: %s\n", key->id);
+	LOG_DEBUG("Random key is set to: %s\n", key->id);
 
 	wmi->has_messagetimestamp = 1;
 	wmi->messagetimestamp = tp.tv_sec;
@@ -213,7 +213,10 @@ l4_send_priv_msg(wa_t *wa, char *to_jid, char *text)
 	to = session_find_user(wa, to_jid);
 
 	if(!to)
+	{
+		LOG_ERR("Can't find user %s, aborting\n", to_jid);
 		return -1;
+	}
 
 	pm = malloc(sizeof(priv_msg_t));
 	pm->from = wa->me;

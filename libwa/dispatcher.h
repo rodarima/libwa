@@ -41,7 +41,7 @@ dispatcher_t *
 dispatch_init();
 
 int
-dispatch_end(dispatcher_t *d);
+dispatch_free(dispatcher_t *d);
 
 int
 dispatch_events(dispatcher_t *d);

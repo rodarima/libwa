@@ -11,7 +11,7 @@
 #include "session.h"
 #include "l4.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_ERR
 #include "log.h"
 
 int
@@ -87,6 +87,7 @@ l3_recv_response(wa_t *wa, bnode_t *bn)
 {
 	json_object *jtype;
 	const char *type;
+	int ret;
 
 	if(!bn->attr)
 		return 1;
@@ -101,7 +102,13 @@ l3_recv_response(wa_t *wa, bnode_t *bn)
 
 	if(strcmp(type, "contacts") == 0)
 	{
-		return l3_recv_contacts(wa, bn);
+		/* On the reception of the contact list, we assume the state is
+		 * ready to any further operation */
+		ret = l3_recv_contacts(wa, bn);
+
+		wa->state = WA_STATE_READY;
+
+		return ret;
 	}
 
 	/* Unknown response msg */
@@ -157,7 +164,7 @@ l3_recv_frequent_contacts(wa_t *wa, bnode_t *bn)
 
 	if(strcmp(type, "frequent") != 0)
 	{
-		LOG_ERR("Unknown contact type: %s\n", type);
+		LOG_WARN("Unknown contact type: %s\n", type);
 		return -1;
 	}
 
@@ -177,10 +184,10 @@ l3_recv_bnode(wa_t *wa, bnode_t *bn)
 {
 	if(!bn->desc)
 	{
-		LOG_ERR("desc is NULL\n");
+		LOG_WARN("desc is NULL\n");
 		return -1;
 	}
-	LOG_INFO("Received bnode with description: %s\n", bn->desc);
+	LOG_DEBUG("Received bnode with description: %s\n", bn->desc);
 	if(strcmp("action", bn->desc) == 0)
 		return l3_recv_action(wa, bn);
 	else if(strcmp("response", bn->desc) == 0)
@@ -247,13 +254,8 @@ l3_send_relay(wa_t *wa, bnode_t *child, char *tag)
 
 	b->data.list[0] = child;
 
-	bnode_print(b, 0);
-
 	out = bnode_to_buf(b);
 
-	/* TODO: Send to layer 2, in order to cipher the msg */
-	LOG_ERR("Sending to l2:\n");
-	buf_hexdump(out);
 	ret = l2_send_buf(wa, out, tag, METRIC_MESSAGE, FLAG_IGNORE);
 
 	free(b);

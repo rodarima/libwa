@@ -166,6 +166,13 @@ crypto_init()
 	return c;
 }
 
+void
+crypto_free(crypto_t *c)
+{
+	/* TODO: Free all the keys */
+	free(c);
+}
+
 char *
 crypto_pubkey_to_b64(EVP_PKEY *p)
 {

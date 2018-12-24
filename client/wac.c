@@ -3,6 +3,7 @@
 
 char *jid = NULL;
 wa_t *wa = NULL;
+int client_run = 1;
 
 int
 cb_priv_msg(void *ptr, priv_msg_t *msg)
@@ -29,7 +30,9 @@ input_worker(void *ptr)
 	{
 		line = NULL;
 		len = 0;
-		getline(&line, &len, stdin);
+
+		if(getline(&line, &len, stdin) < 0)
+			break;
 
 		/* Remove new line */
 		line[strlen(line) - 1] = '\0';
@@ -39,6 +42,10 @@ input_worker(void *ptr)
 
 		free(line);
 	}
+
+	/* No mutex needed, only read from main thread */
+	client_run = 0;
+
 	return NULL;
 }
 
@@ -48,6 +55,12 @@ main(int argc, char *argv[])
 	pthread_t th;
 
 	jid = argv[1];
+
+	if(!jid)
+	{
+		fprintf(stderr, "Usage: %s <recipient>\n", argv[0]);
+		return 1;
+	}
 
 	cb_t cb =
 	{
@@ -59,17 +72,23 @@ main(int argc, char *argv[])
 	wa = wa_init(&cb);
 
 	wa_login(wa);
-	printf("#ready\n");
-	fflush(stdout);
 
-	pthread_create(&th, NULL, input_worker, NULL);
-
-	while(wa->run)
+	/* Wait until we receive the contact list */
+	while(wa->run && (wa->state != WA_STATE_READY))
 	{
 		wa_dispatch(wa, 50);
 	}
+
+	pthread_create(&th, NULL, input_worker, NULL);
+
+	while(wa->run && client_run)
+	{
+		wa_dispatch(wa, 50);
+	}
+
 	wa_free(wa);
 
+	pthread_join(th, NULL);
 
 	return 0;
 }

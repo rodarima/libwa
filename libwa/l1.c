@@ -10,7 +10,7 @@
 #include "wa.h"
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_DEBUG
+#define DEBUG LOG_LEVEL_WARN
 
 #include "log.h"
 
@@ -129,6 +129,7 @@ l1_send_challenge(wa_t *wa, const char *solution)
 	if(status != 200)
 	{
 		LOG_ERR("Challenge failed with status %d\n", status);
+		wa->state = WA_STATE_LOGIN_FAILED;
 		return -1;
 	}
 
@@ -262,7 +263,7 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 		return ret;
 	}
 
-	LOG_ERR("Unknown json msg received: tag:%s cmd:%s\n", msg->tag, msg->cmd);
+	LOG_WARN("Unknown json msg received: tag:%s cmd:%s\n", msg->tag, msg->cmd);
 	json_object_put(jo);
 	return 0;
 }
@@ -376,8 +377,21 @@ l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag)
 	msg->cmd = tmp;
 	msg->len = len;
 
+	/* This crappy mechanism works kinda bad: When a priv message is sent
+	 * with, say tag:3EB0A076FF5E33BF179E, two replies are issued:
+	 *
+	 * tag:3EB0A076FF5E33BF179E cmd:{"status":200,"t":1545602685}
+	 * tag:3EB0A076FF5E33BF179E cmd:
+	 *
+	 * One with a correct status, and other empty. By now I will ignore the
+	 * empty reponse, so I can get a reliable return to the caller, assuming
+	 * the message was sent. */
+
+	LOG_ERR("L1: Sending message with tag:%s\n", msg->tag);
 	/* Block until ack */
 	res = dispatch_request(wa->d, msg, 1);
+
+	LOG_ERR("L1: Message sent with tag:%s\n", msg->tag);
 
 	if(!res)
 	{

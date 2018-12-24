@@ -173,10 +173,13 @@ int ws_loop(ws_t *ws)
 	return 0;
 }
 
-void ws_free(ws_t *w)
+void ws_free(ws_t *ws)
 {
-	if (w->ctx) lws_context_destroy(w->ctx);
-	//if (w->wsi) free(w->wsi);
+	ws->interrupted = 1;
+	pthread_join(ws->worker, NULL);
+
+	if (ws->ctx) lws_context_destroy(ws->ctx);
+	//if (ws->wsi) free(ws->wsi);
 }
 
 void ws_register_recv_cb(ws_t *ws, int (fn)(packet_t*, void *), void *user)
