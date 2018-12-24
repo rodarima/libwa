@@ -1,15 +1,16 @@
-## WhatsApp c library
+## WhatsApp C library
 
-A fast and lightweight c library to connect to WhatsApp. Requires an always
-connected phone capable of login into the web client.
+A fast and lightweight C library to connect to WhatsApp. Requires a phone with a
+working version and connected to the internet, similarly as the web version.
 
-Uses the following libraries:
+The following libraries are required:
 
 - libwebsockets
 - libqrencode
 - libcrypto
 - libjson-c
 - libprotobuf-c
+- libcrypto (OpenSSL)
 
 Still under HEAVY development. Pull requests are appreciated.
 
@@ -23,21 +24,32 @@ plugin to add WhatsApp as an available protocol to IRC.
 
 ### Current status
 
-By now it can only connect to the WhatsApp websocket server, login using the QR
-and start receiving messages. The encrypted messages are succesfully decrypted.
+The library provides the ability to send and receive private text messages, no
+photos or other media are supported yet, neither group messages.
 
-	F8 04 09 0A 4B F8 01 F8  02 34 FC 5B 0A 40 0A 1A   ....K....4.[.@..
-	33 34 36 36 36 36 36 36  36 36 36 40 73 2E 77 68   34666666666@s.wh
-	61 74 73 61 70 70 2E 6E  65 74 10 01 1A 20 42 42   atsapp.net... BB
-	30 30 30 30 30 30 30 30  30 30 30 30 30 30 30 30   0000000000000000
-	30 30 30 30 30 30 30 30  30 30 30 30 30 30 12 0F   00000000000000..
-	0A 0D 54 65 73 74 69 6E  67 20 6C 69 62 77 61 18   ..Testing libwa.
-	A8 85 E7 DE 05 20 00                               ..... ..........
+The built-in client `wac` reads from the standard input, and sends the lines as
+messages to the specified recipient in the argument. The received messages are
+shown in the standard output. The phone should be specified in the following
+format:
 
-Received and sent text messages are displayed with the name of the sender:
+	<country code><phone>@s.whatsapp.net
 
-	<me>: Have you ever seen a supernova?
-	Neil: Well...
-	Neil: Sometimes I power my phone screen in the dark
-	Neil: At maximum brightness
+For example, the number 666666666 in Spain, would be
+`34666666666@s.whatsapp.net`. Some examples using the standard input:
 
+	% PHONE=34666666666@s.whatsapp.net
+	% wac $PHONE
+	Hi, do you read me?
+	Yes!
+
+It can also be piped, as any UNIX like program, for example:
+
+	% echo Hi from the command line | wac $PHONE
+
+Or to get a remote shell:
+
+	% mkfifo fifo
+	% wac < fifo | bash > fifo
+
+
+![A screenshot of the test commands](doc/test.jpg)

@@ -1,4 +1,1 @@
-- Send messages
-  - Bnode packer
-  - Protobuf packer
-  - API send msg
+- Fix layer 1 violation: metric and flag
