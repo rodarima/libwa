@@ -285,6 +285,7 @@ dispatch_wait_reply(dispatcher_t *d, const char *tag)
 
 		LOG_INFO("dispatch_wait_reply: Waiting for some reply event for tag:%s\n",
 			tag);
+
 		pthread_cond_wait(&d->event, &d->lock);
 	}
 

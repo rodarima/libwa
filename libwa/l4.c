@@ -68,7 +68,9 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 
 	ret = session_recv_priv_msg(wa, pm);
 
-	free(pm);
+	/* Don't free after the callback, in order to use the data after the
+	 * return */
+	//free(pm);
 
 	return ret;
 }

@@ -48,6 +48,8 @@ session_update_user(wa_t *w, user_t *u)
 		return cb->update_user(cb->ptr, u);
 	}
 
+	/* User u not freed here */
+
 	return 0;
 }
 
