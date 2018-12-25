@@ -5,7 +5,7 @@
 #include "l4.h"
 #include "l3.h"
 
-#define DEBUG LOG_LEVEL_ERR
+#define DEBUG LOG_LEVEL_INFO
 
 #include "log.h"
 
@@ -49,7 +49,8 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	pm = malloc(sizeof(priv_msg_t));
 	assert(pm);
 
-	pm->text = msg->conversation;
+	/* Copy the text, as the whole wmi will be destroyed */
+	pm->text = strdup(msg->conversation);
 
 	assert(key->has_fromme);
 
