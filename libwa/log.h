@@ -4,7 +4,8 @@
 /* Note that multiple inclusion of this header is allowed. This lead to the
  * ability to set DEBUG per c file */
 
-#define SHOW_FUNCTION 0
+#define SHOW_FILE 1
+#define SHOW_FILE 1
 
 #define LOG_LEVEL_ERR	1
 #define LOG_LEVEL_WARN	2
@@ -24,12 +25,12 @@
 //				##__VA_ARGS__ ); \
 //	} while (0);
 
- #if SHOW_FUNCTION
+ #if SHOW_FILE
   #define _LOG_MSG(level, format, ... ) \
  	do { \
- 		fprintf(stderr, "%s %s:%d " format, \
+ 		fprintf(stderr, "%s %s:%d (%s) " format, \
  				level, \
- 				__FUNCTION__,  __LINE__, \
+ 				__FILE__,  __LINE__, __FUNCTION__, \
  				##__VA_ARGS__ ); \
  	} while (0);
  #else

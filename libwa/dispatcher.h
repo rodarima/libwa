@@ -9,6 +9,7 @@ typedef struct
 {
 	const char *tag;
 	msg_t *msg;
+	double t;
 
 	UT_hash_handle hh;
 } reply_t;

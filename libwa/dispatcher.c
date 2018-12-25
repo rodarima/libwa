@@ -119,7 +119,7 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 	if(pending && !pending->msg)
 	{
 		/* A matching tag was found, save in the proper place */
-		LOG_INFO("MATCH tag:%s\n", msg->tag);
+		LOG_INFO("MATCH tag:%s after %f s\n", msg->tag, tic() - pending->t);
 
 		/* If the cmd in the response is empty, we assume the message
 		 * was wrong, and still wait for the real response. */
@@ -132,6 +132,7 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 
 		LOG_INFO("Signaling cond for tag:%s\n", msg->tag);
 		pending->msg = msg;
+		pending->t = tic();
 		pthread_cond_signal(&d->event);
 		/* Don't free msg, the other thread is still waiting on
 		 * pending->cond */
@@ -157,6 +158,7 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 		unsol = malloc(sizeof(reply_t));
 		assert(unsol);
 		unsol->tag = NULL;
+		unsol->t = tic();
 		unsol->msg = msg;
 
 		HASH_ADD_KEYPTR(hh, d->u, msg->tag, strlen(msg->tag), unsol);
@@ -248,6 +250,7 @@ dispatch_queue_tag(dispatcher_t *d, const char *tag)
 	assert(r);
 
 	r->tag = tag;
+	r->t = tic(); /* The time at the insertion in the queue */
 	assert(r->tag);
 	r->msg = NULL;
 
@@ -283,8 +286,7 @@ dispatch_wait_reply(dispatcher_t *d, const char *tag)
 		if(reply && reply->msg)
 			break;
 
-		LOG_INFO("dispatch_wait_reply: Waiting for some reply event for tag:%s\n",
-			tag);
+		LOG_INFO("Waiting reply for tag:%s\n", tag);
 
 		pthread_cond_wait(&d->event, &d->lock);
 	}
@@ -295,6 +297,9 @@ dispatch_wait_reply(dispatcher_t *d, const char *tag)
 
 	msg = reply->msg;
 
+	LOG_INFO("Reply to msg with tag:%s hold for %f seconds\n",
+		msg->tag, tic() - reply->t);
+
 	free(reply);
 
 	return msg;
@@ -303,10 +308,15 @@ dispatch_wait_reply(dispatcher_t *d, const char *tag)
 msg_t *
 dispatch_request(dispatcher_t *d, const msg_t *msg, int is_bin)
 {
+	double t;
+	msg_t *res;
+
 	if(dispatch_queue_tag(d, msg->tag))
 	{
 		return NULL;
 	}
+
+	t = tic();
 
 	if(dispatch_send_msg(d, msg, is_bin))
 	{
@@ -314,7 +324,12 @@ dispatch_request(dispatcher_t *d, const msg_t *msg, int is_bin)
 		return NULL;
 	}
 
-	return dispatch_wait_reply(d, msg->tag);
+	res = dispatch_wait_reply(d, msg->tag);
+
+	LOG_INFO("Reply from server to msg with tag:%s took %f s\n",
+		msg->tag, tic() - t);
+
+	return res;
 }
 
 msg_t *
@@ -335,6 +350,8 @@ dispatch_wait_event(dispatcher_t *d, int ms)
 		{
 			assert(reply->msg);
 			msg = reply->msg;
+			LOG_INFO("Unsolicited msg with tag:%s hold for %f seconds\n",
+				msg->tag, tic() - reply->t);
 			HASH_DEL(d->u, reply);
 			free(reply);
 			break;

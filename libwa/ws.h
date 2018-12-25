@@ -41,4 +41,6 @@ void ws_register_recv_cb(ws_t *ws, int (*fn)(packet_t *, void *), void *user);
 int ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin);
 int ws_send_pkt(ws_t *ws, packet_t *pkt, int is_bin);
 
+double tic();
+
 #endif

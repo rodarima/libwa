@@ -10,8 +10,21 @@
 
 #define DEBUG_SERVER 0
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
+
+double tic()
+{
+	double t = 0.0;
+	struct timespec ts;
+
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	t += (double) ts.tv_sec;
+	t += ((double) ts.tv_nsec) / 1e9;
+
+	return t;
+}
 
 static int
 ws_recv(ws_t *ws, void *in, size_t len, size_t remaining)
@@ -62,7 +75,7 @@ int
 callback(struct lws* wsi, enum lws_callback_reasons reason, void *user,
 		void* in, size_t len)
 {
-	LOG_DEBUG("Callback called. Reason %d\n", reason);
+	//LOG_DEBUG("Callback called. Reason %d\n", reason);
 	ws_t *ws = (ws_t *) user;
 	size_t remaining;
 
@@ -187,12 +200,15 @@ void *ws_worker(void *arg)
 
 	while (!ws->interrupted)
 	{
+
 		pthread_mutex_lock(ws->service_lock);
-		//LOG_DEBUG("Locked ws->send_lock\n");
-		lws_service(ws->ctx, 50);
+		LOG_DEBUG("Locked ws->service_lock\n");
+		lws_service(ws->ctx, 100000);
 		//fprintf(stderr, "WS thread: alive!\n");
 		pthread_mutex_unlock(ws->service_lock);
-		//LOG_DEBUG("Unlocked ws->send_lock\n");
+		LOG_DEBUG("Unlocked ws->service_lock\n");
+		pthread_mutex_lock(ws->send_lock);
+		pthread_mutex_unlock(ws->send_lock);
 	}
 
 	LOG_DEBUG("WS thread: bye!\n");
@@ -205,14 +221,19 @@ int
 ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin)
 {
 	int sent, mode;
+	double t;
+
+	t = tic();
 
 	pthread_mutex_lock(ws->send_lock);
+	LOG_DEBUG("Locked ws->send_lock in %f s\n", tic() - t);
 
 	/* We assume we can cancel a service from another thread, without any
 	 * synchronization needed */
 	lws_cancel_service(ws->ctx);
 
 	pthread_mutex_lock(ws->service_lock);
+	LOG_DEBUG("Locked ws->service_lock in %f s\n", tic() - t);
 
 	/* No more lws_service() allowed here */
 
@@ -223,14 +244,18 @@ ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin)
 
 	mode = is_bin ? LWS_WRITE_BINARY : LWS_WRITE_TEXT;
 
+	LOG_DEBUG("Flag ws->canwrite locked in %f s\n", tic() - t);
+
 	sent = lws_write(ws->wsi, (unsigned char *) buf, len, mode);
 
 	/* Request writ(e)able callback, to put "can_write" to one again*/
 	lws_callback_on_writable(ws->wsi);
 
 	pthread_mutex_unlock(ws->service_lock);
+	LOG_DEBUG("Unlocked ws->service_lock\n");
 
 	pthread_mutex_unlock(ws->send_lock);
+	LOG_DEBUG("Unlocked ws->send_lock\n");
 
 	if(sent != len)
 	{
