@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 
 #include "bnode.h"
@@ -25,9 +26,10 @@ decrypt(char *fpath)
 	int fd;
 	struct stat sb;
 	buf_t buf, *out;
-	void *ptr;
-	size_t len;
+	unsigned char *ptr;
+	size_t len, remainder;
 	bnode_t *bn;
+	int ret = 0;
 
 	c = crypto_init();
 
@@ -40,15 +42,33 @@ decrypt(char *fpath)
 
 	mem = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 
-	ptr = (void*)mem;
-	//ptr = memchr(mem, ',', sb.st_size);
+	//ptr = (void*)mem;
 
-	//if(!ptr)
-	//	return 1;
+	fprintf(stderr, "file size = %ld\n", sb.st_size);
 
-	//ptr++;
+	ptr = memchr(mem, ',', sb.st_size);
 
-	len = sb.st_size - (((void*) mem) - ptr);
+	if(!ptr)
+	{
+		ret = 1;
+		goto out;
+	}
+
+	ptr++;
+
+	len = sb.st_size - (ptr - (unsigned char *)mem);
+
+	remainder = len % 16;
+
+	fprintf(stderr, "len = %ld, remainder = %ld\n", len, remainder);
+
+	if(remainder != 0)
+	{
+		fprintf(stderr, "Skipping %ld bytes of header\n", remainder);
+		fprintf(stderr, "metric = %d, flags = 0x%02x\n", ptr[0], ptr[1]);
+		len -= remainder;
+		ptr += remainder;
+	}
 
 	buf.ptr = (unsigned char*) ptr;
 	buf.len = len;
@@ -67,7 +87,11 @@ decrypt(char *fpath)
 
 	buf_free(out);
 
-	return 0;
+out:
+
+	close(fd);
+
+	return ret;
 }
 
 int
