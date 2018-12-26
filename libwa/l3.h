@@ -12,3 +12,6 @@ l3_send_relay(wa_t *wa, bnode_t *b, char *tag);
 
 int
 l3_send_relay_msg(wa_t *wa, buf_t *buf, char *tag);
+
+int
+l3_send_seen(wa_t *wa, char *jid, char *id);

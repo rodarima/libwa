@@ -10,7 +10,7 @@
 
 #define DEBUG_SERVER 0
 
-#define DEBUG LOG_LEVEL_DEBUG
+#define DEBUG LOG_LEVEL_WARN
 #include "log.h"
 
 double tic()

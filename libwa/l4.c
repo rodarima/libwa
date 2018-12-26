@@ -21,7 +21,12 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	int ret;
 
 	key = wmi->key;
-	assert(key);
+
+	if(!key)
+	{
+		LOG_WARN("Received msg without key, ignoring\n");
+		return -1;
+	}
 
 	remote = session_find_user(wa, key->remotejid);
 	if(!remote)
@@ -49,12 +54,16 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	pm = malloc(sizeof(priv_msg_t));
 	assert(pm);
 
+	if(!msg->conversation)
+	{
+		LOG_WARN("%s: message text is NULL\n", key->remotejid);
+		return -1;
+	}
+
 	/* Copy the text, as the whole wmi will be destroyed */
 	pm->text = strdup(msg->conversation);
 
-	assert(key->has_fromme);
-
-	if(key->fromme)
+	if(key->has_fromme && key->fromme)
 	{
 		pm->from = wa->me;
 		pm->to = remote;
@@ -68,6 +77,12 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	}
 
 	ret = session_recv_priv_msg(wa, pm);
+
+	if((ret == 0) && (wa->state == WA_STATE_READY))
+	{
+		/* Confirm reception, but only after READY state */
+		l3_send_seen(wa, key->remotejid, key->id);
+	}
 
 	/* Don't free after the callback, in order to use the data after the
 	 * return */

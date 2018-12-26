@@ -42,3 +42,10 @@ l2_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flags)
 
 	return ret;
 }
+
+int
+l2_send_plain(wa_t *wa, buf_t *in, char *tag, int metric, int flags)
+{
+	/* Dummy function */
+	return l1_send_buf(wa, in, tag, metric, flags);
+}

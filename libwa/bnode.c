@@ -347,6 +347,19 @@ bnode_to_buf(bnode_t *b)
 	return buf;
 }
 
+int
+bnode_attr_add(bnode_t *b, char *key, char *val)
+{
+	json_object *val_json;
+
+	if(!b->attr)
+		b->attr = json_object_new_object();
+
+	val_json = json_object_new_string(val);
+	json_object_object_add(b->attr, key, val_json);
+
+	return 0;
+}
 
 
 

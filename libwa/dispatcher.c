@@ -6,7 +6,7 @@
 #include "wa.h"
 #include "ws.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_ERR
 #include "log.h"
 #include "buf.h"
 
@@ -121,14 +121,13 @@ dispatch_recv_msg(dispatcher_t *d, msg_t *msg)
 		/* A matching tag was found, save in the proper place */
 		LOG_INFO("MATCH tag:%s after %f s\n", msg->tag, tic() - pending->t);
 
-		/* If the cmd in the response is empty, we assume the message
-		 * was wrong, and still wait for the real response. */
-		if(msg->len == 0)
-		{
-			LOG_INFO("Ignoring empty msg with tag:%s\n", msg->tag);
-			ret = -1;
-			goto out;
-		}
+		/* We need some empty messages, so they will be used as well */
+		//if(msg->len == 0)
+		//{
+		//	LOG_INFO("Ignoring empty msg with tag:%s\n", msg->tag);
+		//	ret = -1;
+		//	goto out;
+		//}
 
 		LOG_INFO("Signaling cond for tag:%s\n", msg->tag);
 		pending->msg = msg;

@@ -11,7 +11,7 @@
 #include "session.h"
 #include "l4.h"
 
-#define DEBUG LOG_LEVEL_ERR
+#define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
 
 int
@@ -121,6 +121,25 @@ l3_recv_action(wa_t *wa, bnode_t *bn)
 {
 	int i, ret = 0;
 	bnode_t *child;
+	json_object *jval;
+	const char *val;
+
+	if(bn->attr)
+	{
+		jval = json_object_object_get(bn->attr, "add");
+		if(jval)
+		{
+			val = json_object_get_string(jval);
+			assert(val);
+
+			if(strcmp(val, "before") == 0)
+			{
+				/* The msg are old, we can ignore those by now */
+				LOG_INFO("Ignoring action bnode with add:before attr\n");
+				return 0;
+			}
+		}
+	}
 
 	if(bn->type == BNODE_LIST)
 	{
@@ -220,6 +239,10 @@ l3_recv_msg(wa_t *wa, msg_t *msg)
 
 	free(buf);
 
+
+	//LOG_DEBUG("Received msg at l3, bnode is:\n");
+	//bnode_print(bn_l3, 0);
+
 	ret = l3_recv_bnode(wa, bn_l3);
 
 	bnode_free(bn_l3);
@@ -244,7 +267,7 @@ l3_send_relay(wa_t *wa, bnode_t *child, char *tag)
 	json_object_object_add(b->attr, "type",
 			json_object_new_string("relay"));
 
-	asprintf(&msg_counter, "%d", wa->msg_counter);
+	asprintf(&msg_counter, "%d", wa->msg_counter++);
 	json_object_object_add(b->attr, "epoch",
 			json_object_new_string(msg_counter));
 
@@ -285,6 +308,102 @@ l3_send_relay_msg(wa_t *wa, buf_t *buf, char *tag)
 	ret = l3_send_relay(wa, b, tag);
 
 	free(b);
+
+	return ret;
+}
+
+int
+l3_send_seen(wa_t *wa, char *jid, char *id)
+{
+	/* Send the following:
+	 *
+	 * metric = 11
+	 * flag = 0xc0
+	 *
+	 * BNODE
+	 * {
+	 *   desc: action
+	 *   type: list
+	 *   attr:
+	 *   {
+	 *     type : set
+	 *     epoch : 6 (Incremental msg counter)
+	 *   }
+	 *   content
+	 *   {
+	 *     BNODE
+	 *     {
+	 *       desc: read
+	 *       type: empty
+	 *       attr:
+	 *       {
+	 *         jid : 34666666666@s.whatsapp.net (The sender)
+	 *         index : XXXXXXXXXXXXXXXXXXXXXXXXXXXXX (The last msg id)
+	 *         owner : false (If the msg comes from us)
+	 *         count : 2 (Number of messages seen)
+	 *       }
+	 *       content: empty
+	 *     }
+	 * }
+	 * */
+
+	bnode_t *root, *child;
+	int ret;
+	char *epoch;
+	int metric, flags;
+	buf_t *out;
+
+	asprintf(&epoch, "%d", wa->msg_counter++);
+
+	root = calloc(sizeof(bnode_t), 1);
+	assert(root);
+
+	root->desc = strdup("action");
+
+	bnode_attr_add(root, "type", "set");
+	bnode_attr_add(root, "epoch", epoch);
+
+	root->type = BNODE_LIST;
+	root->data.list = malloc(sizeof(bnode_t *) * 1);
+	root->len = 1;
+
+	child = calloc(sizeof(bnode_t), 1);
+
+	child->desc = strdup("read");
+	child->type = BNODE_EMPTY;
+
+	bnode_attr_add(child, "jid", jid);
+	bnode_attr_add(child, "index", id);
+	bnode_attr_add(child, "owner", "false");
+
+	/* TODO: Implement count > 1 */
+
+	bnode_attr_add(child, "count", "1");
+
+	root->data.list[0] = child;
+
+	out = bnode_to_buf(root);
+
+	metric = METRIC_READ;
+
+	/* Original flags:
+	 *
+	 * flags = FLAG_EXPIRES | FLAG_SKIP_OFFLINE;
+	 *
+	 * But we want an ack to proceed.
+	 */
+
+	flags = FLAG_EXPIRES | FLAG_ACK_REQUEST;
+
+	LOG_INFO("Sending seen of msg %s to %s\n", id, jid);
+
+	ret = l2_send_buf(wa, out, NULL, metric, flags);
+
+	bnode_free(root);
+
+	/* The child is automatically free'd */
+	free(epoch);
+
 
 	return ret;
 }

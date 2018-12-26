@@ -46,4 +46,7 @@ bnode_to_buf(bnode_t *b);
 void
 bnode_free(bnode_t *b);
 
+int
+bnode_attr_add(bnode_t *b, char *key, char *val);
+
 #endif

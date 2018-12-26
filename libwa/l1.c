@@ -10,7 +10,7 @@
 #include "wa.h"
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_ERR
+#define DEBUG LOG_LEVEL_INFO
 
 #include "log.h"
 
@@ -380,14 +380,24 @@ l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag)
 	/* This crappy mechanism works kinda bad: When a priv message is sent
 	 * with, say tag:3EB0A076FF5E33BF179E, two replies are issued:
 	 *
-	 * tag:3EB0A076FF5E33BF179E cmd:{"status":200,"t":1545602685}
 	 * tag:3EB0A076FF5E33BF179E cmd:
+	 * tag:3EB0A076FF5E33BF179E cmd:{"status":200,"t":1545602685}
 	 *
-	 * One with a correct status, and other empty. By now I will ignore the
-	 * empty reponse, so I can get a reliable return to the caller, assuming
-	 * the message was sent. */
+	 * The first one, has an empty cmd, and is meant to ack the reception of
+	 * the msg from the server.
+	 *
+	 * The second one, is only available when the message arrives at the
+	 * other end, probably exclusive for "relay" messages.
+	 *
+	 * For the sake of generality, only the reception at the server will be
+	 * used for dispatch_request to return, that's it, the first to return
+	 * (at least by now).
+	 *
+	 * TODO: Do it properly.
+	 * */
 
 	LOG_DEBUG("L1: Sending message with tag:%s\n", msg->tag);
+
 	/* Block until ack */
 	res = dispatch_request(wa->d, msg, 1);
 
