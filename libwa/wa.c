@@ -123,7 +123,7 @@ action_takeover(wa_t *wa)
 /* Exported symbols */
 
 wa_t *
-wa_init(cb_t *cb)
+wa_init(cb_t *cb, const char *config_dir)
 {
 	wa_t *wa = calloc(1, sizeof(wa_t));
 	wa->run = 1;
@@ -143,6 +143,10 @@ wa_init(cb_t *cb)
 	wa->me->notify = "notify?";
 	wa->state = WA_STATE_LOGGING;
 	wa->keep_alive_next = 0;
+	wa->s = storage_init(config_dir);
+
+
+	//wa->last_forwarded = 0;
 
 	return wa;
 }
@@ -153,15 +157,16 @@ wa_free(wa_t *w)
 	w->run = 0;
 	dispatch_free(w->d);
 	crypto_free(w->c);
+	storage_free(w->s);
 	free(w);
 }
 
 int
-wa_login(wa_t *wa, const char *session_file)
+wa_login(wa_t *wa)
 {
 	int restore_failed;
 
-	restore_failed = (session_restore(wa, session_file) != 0);
+	restore_failed = (session_restore(wa) != 0);
 
 	if(restore_failed)
 	{
@@ -213,8 +218,7 @@ wa_login(wa_t *wa, const char *session_file)
 
 	if(restore_failed)
 	{
-		LOG_ERR("Saving session to file: %s\n", session_file);
-		if(session_save(wa, session_file) != 0)
+		if(session_save(wa) != 0)
 		{
 			LOG_ERR("Saving session failed!\n");
 			return -1;

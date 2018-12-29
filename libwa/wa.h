@@ -10,6 +10,7 @@
 #include "buf.h"
 #include "crypto.h"
 #include "dispatcher.h"
+#include "storage.h"
 
 #define MAX_QUEUE 10
 
@@ -37,6 +38,7 @@ typedef struct
 	char *text;
 	user_t *from;
 	user_t *to;
+	int from_me;
 } priv_msg_t;
 
 typedef struct
@@ -78,15 +80,16 @@ typedef struct
 	time_t login_time;
 	dispatcher_t *d;
 	crypto_t *c;
+	store_t *s;
 	cb_t *cb;
 } wa_t;
 
 
 wa_t *
-wa_init(cb_t *cb);
+wa_init(cb_t *cb, const char *config_dir);
 
 int
-wa_login(wa_t *w, const char *session_file);
+wa_login(wa_t *w);
 
 void
 wa_free(wa_t *w);

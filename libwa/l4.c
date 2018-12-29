@@ -11,6 +11,8 @@
 
 #define LEN_MSG_KEY 10
 
+
+
 static int
 parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 {
@@ -40,6 +42,11 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 		{
 			LOG_WARN("Remote jid not found: %s\n", key->remotejid);
 		}
+
+		if(wmi->has_status)
+		{
+			LOG_WARN("Status = %d\n", wmi->status);
+		}
 		return -1;
 	}
 
@@ -67,11 +74,13 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	{
 		pm->from = wa->me;
 		pm->to = remote;
+		pm->from_me = 1;
 	}
 	else
 	{
 		pm->from = remote;
 		pm->to = wa->me;
+		pm->from_me = 0;
 		LOG_INFO("Priv msg received from %s : %s\n",
 				pm->from->name, pm->text);
 	}

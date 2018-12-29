@@ -55,7 +55,7 @@ int
 main(int argc, char *argv[])
 {
 	pthread_t th;
-	char session_file[PATH_MAX];
+	char config_dir[PATH_MAX];
 
 	jid = argv[1];
 
@@ -72,13 +72,11 @@ main(int argc, char *argv[])
 		.update_user = cb_update_user,
 	};
 
-	wa = wa_init(&cb);
+	getcwd(config_dir, PATH_MAX);
 
-	getcwd(session_file, sizeof(session_file));
+	wa = wa_init(&cb, config_dir);
 
-	strcat(session_file, "/session.json");
-
-	wa_login(wa, session_file);
+	wa_login(wa);
 
 	/* Wait until we receive the contact list */
 	while(wa->run && (wa->state != WA_STATE_READY))

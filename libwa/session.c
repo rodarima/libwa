@@ -1,15 +1,16 @@
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_WARN
-#include "log.h"
-#include "wa.h"
-#include "qr.h"
-
 #include <assert.h>
 #include <string.h>
 
-/* TODO: Choose a proper file to store the JSON session */
-#define SESSION_FILE "session.json"
+#include "wa.h"
+#include "qr.h"
+#include "storage.h"
+
+#define DEBUG LOG_LEVEL_WARN
+#include "log.h"
+
+#define SESSION_KEY "session"
 
 int
 session_update_user(wa_t *w, user_t *u)
@@ -99,14 +100,14 @@ generate_qr_data(wa_t *wa)
 }
 
 int
-session_restore(wa_t *wa, const char *session_file)
+session_restore(wa_t *wa)
 {
 	json_object *root, *v;
 
-	root = json_object_from_file(session_file);
-
-	if(!root)
+	if(storage_read(wa->s, SESSION_KEY, &root))
+	{
 		return -1;
+	}
 
 	v = json_object_object_get(root, "client_token");
 	wa->client_token = strdup(json_object_get_string(v));
@@ -126,7 +127,7 @@ session_restore(wa_t *wa, const char *session_file)
 }
 
 int
-session_save(wa_t *wa, const char *session_file)
+session_save(wa_t *wa)
 {
 	json_object *root, *v;
 	root = json_object_new_object();
@@ -142,7 +143,11 @@ session_save(wa_t *wa, const char *session_file)
 	v = crypto_save(wa->c);
 	json_object_object_add(root, "crypto", v);
 
-	json_object_to_file(session_file, root);
+	if(storage_write(wa->s, SESSION_KEY, root))
+	{
+		return -1;
+	}
+
 	return 0;
 }
 

@@ -121,25 +121,26 @@ l3_recv_action(wa_t *wa, bnode_t *bn)
 {
 	int i, ret = 0;
 	bnode_t *child;
-	json_object *jval;
-	const char *val;
-
-	if(bn->attr)
-	{
-		jval = json_object_object_get(bn->attr, "add");
-		if(jval)
-		{
-			val = json_object_get_string(jval);
-			assert(val);
-
-			if(strcmp(val, "before") == 0)
-			{
-				/* The msg are old, we can ignore those by now */
-				LOG_INFO("Ignoring action bnode with add:before attr\n");
-				return 0;
-			}
-		}
-	}
+//	json_object *jval;
+//	const char *val;
+//
+//	if(bn->attr)
+//	{
+//		jval = json_object_object_get(bn->attr, "add");
+//		if(jval)
+//		{
+//			val = json_object_get_string(jval);
+//			assert(val);
+//
+//			if(strcmp(val, "before") == 0)
+//			{
+//				/* The msg are old, we can ignore those by now */
+//				LOG_INFO("Ignoring action bnode with add:before attr\n");
+//				//bnode_print(bn, 0);
+//				return 0;
+//			}
+//		}
+//	}
 
 	if(bn->type == BNODE_LIST)
 	{
@@ -198,9 +199,27 @@ l3_recv_frequent_contacts(wa_t *wa, bnode_t *bn)
 	return ret;
 }
 
+
+/* We have an order problem with the three packets that arrive at the beginning
+ * of the connection.
+ *
+ * The first one, <action:message add:last> is received with the last message in
+ * each recent conversation.
+ *
+ * The second one, <action:contacts> contains all the contact list.
+ *
+ * Finally, the last one, <action:message add:before last:true> contains the
+ * last ~20 messages of each conversation, *excluding the last one*.
+ *
+ * This behavior leads to the need of queueing the first message, containing the
+ * last words of the conversation, until all the messages could be read in
+ * chronological order.
+ */
+
 int
 l3_recv_bnode(wa_t *wa, bnode_t *bn)
 {
+
 	if(!bn->desc)
 	{
 		LOG_WARN("desc is NULL\n");
