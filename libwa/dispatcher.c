@@ -352,6 +352,15 @@ dispatch_wait_event(dispatcher_t *d, int ms)
 			LOG_INFO("Unsolicited msg with tag:%s hold for %f seconds\n",
 				msg->tag, tic() - reply->t);
 			HASH_DEL(d->u, reply);
+
+			if(d->last_t > reply->t)
+			{
+				LOG_ERR("reply->t = %f but last_t = %f\n",
+					reply->t, d->last_t);
+				abort();
+			}
+			d->last_t = reply->t;
+
 			free(reply);
 			break;
 		}
@@ -383,6 +392,8 @@ dispatch_init()
 	/* Init hash tables */
 	d->q = NULL;
 	d->u = NULL;
+
+	d->last_t = 0.0;
 
 	/* Set the callback to recv in websocket */
 	ws_register_recv_cb(d->ws, dispatch_recv_packet, (void *) d);

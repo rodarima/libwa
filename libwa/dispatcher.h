@@ -35,6 +35,9 @@ typedef struct
 	int (*u_fn)(msg_t *, void *);
 	void *u_user;
 
+	/* For testing order */
+	double last_t;
+
 } dispatcher_t;
 
 
