@@ -17,10 +17,10 @@ int
 session_update_user(wa_t *w, user_t *u);
 
 int
-session_restore(wa_t *wa);
+session_restore(wa_t *wa, const char *session_file);
 
 int
-session_save(wa_t *wa);
+session_save(wa_t *wa, const char *session_file);
 
 int
 session_new(wa_t *wa);

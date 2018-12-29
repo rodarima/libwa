@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <unistd.h>
+
 #include "wa.h"
 
 char *jid = NULL;
@@ -53,6 +55,7 @@ int
 main(int argc, char *argv[])
 {
 	pthread_t th;
+	char session_file[PATH_MAX];
 
 	jid = argv[1];
 
@@ -71,7 +74,11 @@ main(int argc, char *argv[])
 
 	wa = wa_init(&cb);
 
-	wa_login(wa);
+	getcwd(session_file, sizeof(session_file));
+
+	strcat(session_file, "/session.json");
+
+	wa_login(wa, session_file);
 
 	/* Wait until we receive the contact list */
 	while(wa->run && (wa->state != WA_STATE_READY))

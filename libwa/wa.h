@@ -86,7 +86,7 @@ wa_t *
 wa_init(cb_t *cb);
 
 int
-wa_login(wa_t *w);
+wa_login(wa_t *w, const char *session_file);
 
 void
 wa_free(wa_t *w);

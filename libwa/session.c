@@ -99,11 +99,11 @@ generate_qr_data(wa_t *wa)
 }
 
 int
-session_restore(wa_t *wa)
+session_restore(wa_t *wa, const char *session_file)
 {
 	json_object *root, *v;
 
-	root = json_object_from_file(SESSION_FILE);
+	root = json_object_from_file(session_file);
 
 	if(!root)
 		return -1;
@@ -126,7 +126,7 @@ session_restore(wa_t *wa)
 }
 
 int
-session_save(wa_t *wa)
+session_save(wa_t *wa, const char *session_file)
 {
 	json_object *root, *v;
 	root = json_object_new_object();
@@ -142,7 +142,7 @@ session_save(wa_t *wa)
 	v = crypto_save(wa->c);
 	json_object_object_add(root, "crypto", v);
 
-	json_object_to_file(SESSION_FILE, root);
+	json_object_to_file(session_file, root);
 	return 0;
 }
 

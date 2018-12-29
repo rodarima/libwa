@@ -157,10 +157,13 @@ wa_free(wa_t *w)
 }
 
 int
-wa_login(wa_t *wa)
+wa_login(wa_t *wa, const char *session_file)
 {
+	int restore_failed;
 
-	if(session_restore(wa) != 0)
+	restore_failed = (session_restore(wa, session_file) != 0);
+
+	if(restore_failed)
 	{
 		LOG_INFO("Issuing a new session, restore failed\n");
 
@@ -200,7 +203,7 @@ wa_login(wa_t *wa)
 	while(wa->run)
 	{
 		if(wa->state == WA_STATE_LOGGED_IN)
-			return 0;
+			break;
 
 		if(wa->state == WA_STATE_LOGIN_FAILED)
 			return -1;
@@ -208,6 +211,15 @@ wa_login(wa_t *wa)
 		wa_dispatch(wa, 50);
 	}
 
+	if(restore_failed)
+	{
+		LOG_ERR("Saving session to file: %s\n", session_file);
+		if(session_save(wa, session_file) != 0)
+		{
+			LOG_ERR("Saving session failed!\n");
+			return -1;
+		}
+	}
 
 	return 0;
 }

@@ -89,8 +89,6 @@ l1_recv_conn(wa_t *wa, struct json_object *array)
 
 	wa->state = WA_STATE_LOGGED_IN;
 
-	session_save(wa);
-
 	return 0;
 }
 
