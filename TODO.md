@@ -1,5 +1,5 @@
 - Fix layer 1 violation: metric and flag
-- Config file for session
-- Emojis lead to NULL pm text
-- Ack received messages
+- Sort received messages at login
+- Save last forwarded msg
+- Message history
 - Groups
