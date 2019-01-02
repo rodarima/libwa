@@ -12,7 +12,6 @@
 #include "crypto.h"
 #include "dispatcher.h"
 #include "storage.h"
-#include "msg_queue.h"
 
 #define MAX_QUEUE 10
 
@@ -42,12 +41,38 @@ typedef struct
 {
 	char *text;
 	char *jid;
-	char *msg_id;
-	user_t *from;
-	user_t *to;
+	user_t *user;
 	int from_me;
-	uint64_t timestamp;
+	char *msg_id;
+	time_t timestamp;
 } priv_msg_t;
+
+/* Sorted in chronological order */
+typedef struct conv_msg_t
+{
+	priv_msg_t *pm;
+
+	struct conv_msg_t *prev, *next;
+} conv_msg_t;
+
+typedef struct conv_t
+{
+	char *last_msg_id;
+	char *jid;
+	int count;
+
+	/* When the conversation contains the last forwarded message, it needs
+	 * to be cleaned, and last points to the last forwarded message */
+	conv_msg_t *last;
+
+	conv_msg_t *l;
+	UT_hash_handle hh;
+} conv_t;
+
+typedef struct
+{
+	conv_t *conv;
+} chat_t;
 
 typedef struct
 {
@@ -91,8 +116,8 @@ typedef struct
 	dispatcher_t *d;
 	crypto_t *c;
 	store_t *s;
-	mq_t *mq;
 	cb_t *cb;
+	chat_t *chat;
 } wa_t;
 
 

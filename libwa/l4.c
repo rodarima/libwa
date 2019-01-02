@@ -4,8 +4,9 @@
 #include "wa.h"
 #include "l4.h"
 #include "l3.h"
+#include "chat.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_DEBUG
 
 #include "log.h"
 
@@ -19,9 +20,7 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	Proto__MessageKey *key;
 	Proto__Message *msg;
 	priv_msg_t *pm;
-	user_t *remote;
 	int ret;
-	char *last_msg_id;
 
 	key = wmi->key;
 
@@ -31,21 +30,7 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 		return -1;
 	}
 
-	remote = session_find_user(wa, key->remotejid);
-	if(!remote)
-	{
-		if(wmi->message && wmi->message->conversation)
-		{
-			LOG_WARN("Remote jid not found: %s said : %s\n",
-				key->remotejid, wmi->message->conversation);
-		}
-		else
-		{
-			LOG_WARN("Remote jid not found: %s\n", key->remotejid);
-		}
-
-		return -1;
-	}
+	LOG_DEBUG("Received msg with key:%s\n", key->id);
 
 	msg = wmi->message;
 
@@ -55,13 +40,9 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 		return -1;
 	}
 
-	if(key->has_fromme && key->fromme)
+	if(!msg->conversation)
 	{
-		/* We ignore those by now, as we assume that sent messages are
-		 * already read */
-
-		LOG_WARN("Ignoring already sent msg to jid:%s\n",
-			key->remotejid);
+		LOG_WARN("%s: message text is NULL\n", key->remotejid);
 		return -1;
 	}
 
@@ -70,62 +51,30 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 		LOG_WARN("Received msg with status = %d\n", wmi->status);
 	}
 
-	last_msg_id = storage_user_read(wa->s, key->remotejid, "last");
 
-	if(last_msg_id)
-	{
-		if(strcmp(last_msg_id, key->id) != 0)
-		{
-			/* The message is not the last one received */
-		}
-	}
-
-//	if(wmi->has_messagetimestamp && (wmi->messagetimestamp <= wa->last_forwarded))
-//	{
-//		LOG_WARN("Ignoring previous msg from jid:%s with timestamp %lu\n",
-//			key->remotejid, wmi->messagetimestamp);
-//		return -1;
-//	}
-//
-//	wa->last_forwarded = wmi->messagetimestamp;
-//	LOG_DEBUG("Update wa->last_forwarded = %lu\n", wa->last_forwarded);
-
-	pm = malloc(sizeof(priv_msg_t));
+	pm = calloc(1, sizeof(priv_msg_t));
 	assert(pm);
 
 	pm->timestamp = wmi->messagetimestamp;
 
-	if(!msg->conversation)
-	{
-		LOG_WARN("%s: message text is NULL\n", key->remotejid);
-		return -1;
-	}
-
 	/* Copy the text, as the whole wmi will be destroyed */
 	pm->text = strdup(msg->conversation);
 
+	pm->jid = strdup(key->remotejid);
+	pm->msg_id = strdup(key->id);
+	/* Contacts may not be ready */
+	//pm->user = remote;
+
 	if(key->has_fromme && key->fromme)
-	{
-		pm->from = wa->me;
-		pm->to = remote;
 		pm->from_me = 1;
-	}
-	else
-	{
-		pm->from = remote;
-		pm->to = wa->me;
-		pm->from_me = 0;
-		LOG_DEBUG("Priv msg received from %s : %s\n",
-				pm->from->name, pm->text);
-	}
 
-	ret = session_recv_priv_msg(wa, pm);
+	ret = chat_recv_priv_msg(wa, pm);
 
-	if((ret == 0) && (wa->state == WA_STATE_READY))
-	{
-		/* Confirm reception, but only after READY state */
-		l3_send_seen(wa, key->remotejid, key->id);
-	}
+//	if((ret == 0) && (wa->state == WA_STATE_READY))
+//	{
+//		/* Confirm reception, but only after READY state */
+//		l3_send_seen(wa, key->remotejid, key->id);
+//	}
 
 	/* Don't free after the callback, in order to use the data after the
 	 * return */
@@ -142,7 +91,7 @@ parse_group_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 }
 
 int
-l4_recv_msg(wa_t *wa, unsigned char *buf, size_t len)
+l4_recv_msg(wa_t *wa, unsigned char *buf, size_t len, int last)
 {
 	Proto__WebMessageInfo *wmi;
 	int ret;
@@ -155,6 +104,7 @@ l4_recv_msg(wa_t *wa, unsigned char *buf, size_t len)
 	{
 		LOG_WARN("Required field 'key' missing\n");
 		ret = -1;
+		goto err;
 	}
 	else
 	{
@@ -170,6 +120,13 @@ l4_recv_msg(wa_t *wa, unsigned char *buf, size_t len)
 		}
 	}
 
+	if(last && wa->state >= WA_STATE_CONTACTS_RECEIVED)
+	{
+		LOG_DEBUG("wa->state = %d, flushing chats\n", wa->state);
+		chat_flush(wa);
+	}
+
+err:
 	proto__web_message_info__free_unpacked(wmi, NULL);
 
 	return ret;
@@ -231,7 +188,7 @@ send_priv_msg(wa_t *wa, priv_msg_t *pm)
 	key->has_fromme = 1;
 	key->fromme = 1;
 
-	key->remotejid = pm->to->jid;
+	key->remotejid = pm->jid;
 
 	key->id = random_key();
 	LOG_DEBUG("Random key is set to: %s\n", key->id);
@@ -280,9 +237,10 @@ l4_send_priv_msg(wa_t *wa, char *to_jid, char *text)
 	}
 
 	pm = malloc(sizeof(priv_msg_t));
-	pm->from = wa->me;
-	pm->to = to;
+	pm->user = to;
+	pm->jid = to_jid;
 	pm->text = text;
+	/* TODO: Timestamp */
 
 	send_priv_msg(wa, pm);
 

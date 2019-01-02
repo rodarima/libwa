@@ -143,9 +143,9 @@ storage_user_write(store_t *s, char *jid, char *key, char *value)
 char *
 storage_user_read(store_t *s, char *jid, char *key)
 {
-	char *path, *user, *p, *line;
+	char *path, *user, *p, *line = NULL;
 	FILE *f;
-	size_t len;
+	long size;
 
 	/* Remove server address */
 
@@ -157,12 +157,21 @@ storage_user_read(store_t *s, char *jid, char *key)
 
 	asprintf(&path, "%s/user/%s/%s", s->path, user, key);
 
-	f = fopen(path, "w");
+	f = fopen(path, "rb");
 	if(!f)
 		return NULL;
 
-	getline(&line, &len, f);
+	fseek(f, 0, SEEK_END);
+	size = ftell(f);
+	rewind(f);
+
+	line = malloc(size + 1);
+	fread(line, size, 1, f);
 	fclose(f);
+
+	line[size] = 0;
+
+	LOG_DEBUG("storage read %ld bytes %s : %s\n", size, path, line);
 
 	free(path);
 	free(user);

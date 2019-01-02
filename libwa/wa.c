@@ -10,7 +10,7 @@
 #include "session.h"
 #include "l1.h"
 #include "l4.h"
-#include "msg_queue.h"
+#include "chat.h"
 
 #define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
@@ -131,6 +131,7 @@ wa_init(cb_t *cb, const char *config_dir)
 
 	wa->d = dispatch_init();
 	wa->c = crypto_init();
+	wa->chat = chat_init();
 
 	wa->cb = cb;
 
@@ -148,8 +149,6 @@ wa_init(cb_t *cb, const char *config_dir)
 	wa->s = wa_storage_init(config_dir);
 	wa->last_forwarded = 0;
 	wa->last_timestamp = 0;
-
-	wa->mq = mq_init();
 
 	return wa;
 }

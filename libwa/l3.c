@@ -10,6 +10,7 @@
 #include "bnode.h"
 #include "session.h"
 #include "l4.h"
+#include "chat.h"
 
 #define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
@@ -18,8 +19,27 @@ int
 l3_recv_bnode(wa_t *wa, bnode_t *bn);
 
 int
-l3_recv_message(wa_t *wa, bnode_t *bn);
+l3_recv_message(wa_t *wa, bnode_t *bn, int last);
 
+int
+l3_recv_chat(wa_t *wa, bnode_t *bn)
+{
+	char *jid;
+	int count;
+
+	if(!bn->desc)
+		return 1;
+
+	if(strcmp(bn->desc, "chat") != 0)
+		return 1;
+
+	jid = strdup(bnode_attr_get(bn, "jid"));
+	count = atoi(bnode_attr_get(bn, "count"));
+
+	chat_update(wa, jid, count);
+
+	return 0;
+}
 int
 l3_recv_contact(wa_t *wa, bnode_t *bn)
 {
@@ -66,32 +86,24 @@ l3_recv_contact(wa_t *wa, bnode_t *bn)
 	return 0;
 }
 
+
 int
-l3_check_queue(wa_t *wa)
+l3_recv_response_chat(wa_t *wa, bnode_t *bn)
 {
-	bnode_t *bn, *begin = NULL;
-	int stop = 0;
+	int i, ret=0;
 
-	while(!stop)
+	if(bn->type != BNODE_LIST)
+		return -1;
+
+	if(!bn->data.list)
+		return -1;
+
+	for(i=0; i<bn->len; i++)
 	{
-		stop = 1;
-		while((bn = mq_bnode_pop(wa->mq)))
-		{
-			if(bn == begin)
-				/* Loop detected */
-				break;
-
-			if(!begin)
-				begin = bn;
-
-			if(!l3_recv_bnode(wa, bn))
-			{
-				stop = 0;
-				begin = NULL;
-			}
-		}
+		ret |= l3_recv_chat(wa, bn->data.list[i]);
 	}
-	return 0;
+
+	return ret;
 }
 
 int
@@ -133,7 +145,11 @@ l3_recv_contacts(wa_t *wa, bnode_t *bn)
 	wa->state = WA_STATE_CONTACTS_RECEIVED;
 
 	/* As we update the state, some msg can be dequeued */
-	l3_check_queue(wa);
+	chat_flush(wa);
+
+	/* TODO: By now we mark the ready state after we flush the chat list,
+	 * but we may still be waiting on the last message part */
+	wa->state = WA_STATE_READY;
 
 	return ret;
 }
@@ -143,7 +159,6 @@ l3_recv_response(wa_t *wa, bnode_t *bn)
 {
 	json_object *jtype;
 	const char *type;
-	int ret;
 
 	if(!bn->attr)
 		return 1;
@@ -157,13 +172,9 @@ l3_recv_response(wa_t *wa, bnode_t *bn)
 	assert(type);
 
 	if(strcmp(type, "contacts") == 0)
-	{
-		/* On the reception of the contact list, we assume the state is
-		 * ready to any further operation */
-		ret = l3_recv_contacts(wa, bn);
-
-		return ret;
-	}
+		return l3_recv_contacts(wa, bn);
+	else if(strcmp(type, "chat") == 0)
+		return l3_recv_response_chat(wa, bn);
 
 	/* Unknown response msg */
 
@@ -171,89 +182,45 @@ l3_recv_response(wa_t *wa, bnode_t *bn)
 }
 
 int
-l3_recv_action_child(wa_t *wa, bnode_t *bn)
+l3_recv_action_child(wa_t *wa, bnode_t *bn, int last)
 {
 	if(strcmp("contacts", bn->desc) == 0)
 		return l3_recv_contacts(wa, bn);
 	else if(strcmp("message", bn->desc) == 0)
-		return l3_recv_message(wa, bn);
+		return l3_recv_message(wa, bn, last);
 
 	return -1;
 }
 
-int
-action_filter(wa_t *wa, bnode_t *bn)
-{
-	/* No need to queue if we already have the before part */
-
-	LOG_INFO("wa->state = %d\n", wa->state);
-	if(wa->state >= WA_STATE_BEFORE_RECEIVED)
-		return 0;
-
-	if(bnode_attr_exists(bn, "add", "last"))
-	{
-		mq_bnode_push(wa->mq, bn);
-		return 1;
-	}
-
-	if(wa->state >= WA_STATE_CONTACTS_RECEIVED)
-		return 0;
-
-	if(bnode_attr_exists(bn, "add", "before"))
-	{
-		mq_bnode_push(wa->mq, bn);
-		return 1;
-	}
-
-	return 0;
-}
 
 int
 l3_recv_action(wa_t *wa, bnode_t *bn)
 {
-	int i, ret = 0;
+	int i, ret = 0, last = 0;
 	bnode_t *child;
-
-//	if(action_filter(wa, bn))
-//	{
-//		LOG_WARN("bnode queued\n");
-//		return 1;
-//	}
 
 	if(bn->type == BNODE_LIST)
 	{
 		for(i=0; i<bn->len; i++)
 		{
-			child = (bnode_t *) bn->data.list[i];
-			ret |= l3_recv_action_child(wa, child);
-		}
-	}
-	if(bnode_attr_exists(bn, "add", "before"))
-	{
-		wa->state = WA_STATE_BEFORE_RECEIVED;
-	}
+			if(i == bn->len -1)
+				last = 1;
 
-	if(bnode_attr_exists(bn, "add", "last"))
-	{
-		wa->state = WA_STATE_LAST_RECEIVED;
-		wa->state = WA_STATE_READY;
+			child = (bnode_t *) bn->data.list[i];
+			ret |= l3_recv_action_child(wa, child, last);
+		}
 	}
 
 	return ret;
 }
 
 int
-l3_recv_message(wa_t *wa, bnode_t *bn)
+l3_recv_message(wa_t *wa, bnode_t *bn, int last)
 {
 
-	if(wa->state != WA_STATE_CONTACTS_RECEIVED)
-	{
-		/* Queue the message until the contacts are received */
-		//mq_add_bnode();
-	}
 	//LOG_INFO("Received msg bnode:\n");
 	//bnode_print(bn, 0);
-	return l4_recv_msg(wa, bn->data.bytes, bn->len);
+	return l4_recv_msg(wa, bn->data.bytes, bn->len, last);
 }
 
 int
@@ -304,7 +271,7 @@ l3_recv_frequent_contacts(wa_t *wa, bnode_t *bn)
  * b) <action:contacts> contains all the contact list.
  *
  * c) <action:message add:before last:true> contains the last ~20 messages of
- * each conversation, *excluding the last one*.
+ * each conversation, *excluding the last one*. Can consist of multiple packets.
  *
  * This behavior leads to the need of queueing the packets, as we want to read
  * (b), then (c) then (a), so we have all the contacts before reading the
