@@ -10,6 +10,7 @@
 #include "session.h"
 #include "l1.h"
 #include "l4.h"
+#include "msg_queue.h"
 
 #define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
@@ -143,10 +144,12 @@ wa_init(cb_t *cb, const char *config_dir)
 	wa->me->notify = "notify?";
 	wa->state = WA_STATE_LOGGING;
 	wa->keep_alive_next = 0;
-	wa->s = storage_init(config_dir);
 
+	wa->s = wa_storage_init(config_dir);
+	wa->last_forwarded = 0;
+	wa->last_timestamp = 0;
 
-	//wa->last_forwarded = 0;
+	wa->mq = mq_init();
 
 	return wa;
 }
@@ -165,6 +168,8 @@ int
 wa_login(wa_t *wa)
 {
 	int restore_failed;
+
+	printf("s->path %s\n", wa->s->path);
 
 	restore_failed = (session_restore(wa) != 0);
 

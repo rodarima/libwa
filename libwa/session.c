@@ -7,7 +7,7 @@
 #include "qr.h"
 #include "storage.h"
 
-#define DEBUG LOG_LEVEL_WARN
+#define DEBUG LOG_LEVEL_INFO
 #include "log.h"
 
 #define SESSION_KEY "session"
@@ -20,7 +20,7 @@ session_update_user(wa_t *w, user_t *u)
 
 	assert(u->jid);
 
-	LOG_INFO("Updating user %s (%s)\n", u->name, u->jid);
+	LOG_DEBUG("Updating user %s (%s)\n", u->name, u->jid);
 
 	HASH_FIND_STR(w->users, u->jid, f);
 
@@ -63,18 +63,37 @@ session_find_user(wa_t *w, const char *jid)
 }
 
 int
+update_last_forwarded(wa_t *wa, uint64_t timestamp)
+{
+	json_object *root, *v;
+
+	root = json_object_new_object();
+	v = json_object_new_int(timestamp);
+	json_object_object_add(root, "timestamp", v);
+
+	storage_write(wa->s, "last_forwarded", root);
+
+	json_object_put(root);
+	return 0;
+}
+
+int
 session_recv_priv_msg(wa_t *w, priv_msg_t *pm)
 {
+	int ret = 0;
 	cb_t *cb;
 
 	cb = w->cb;
 
 	if(cb->priv_msg)
 	{
-		return cb->priv_msg(cb->ptr, pm);
+		ret = cb->priv_msg(cb->ptr, pm);
 	}
 
-	return 0;
+	/* Ignore by now */
+//	update_last_forwarded(w, pm->timestamp);
+
+	return ret;
 }
 
 static char*
@@ -104,6 +123,8 @@ session_restore(wa_t *wa)
 {
 	json_object *root, *v;
 
+	printf("s->path %s\n", wa->s->path);
+
 	if(storage_read(wa->s, SESSION_KEY, &root))
 	{
 		return -1;
@@ -120,6 +141,18 @@ session_restore(wa_t *wa)
 
 	v = json_object_object_get(root, "crypto");
 	crypto_restore(wa->c, v);
+
+	json_object_put(root);
+
+	if(storage_read(wa->s, "last_forwarded", &root))
+	{
+		/* Simply use 0 as timestamp */
+		wa->last_forwarded = 0;
+		return 0;
+	}
+
+	v = json_object_object_get(root, "timestamp");
+	wa->last_forwarded = json_object_get_int64(v);
 
 	json_object_put(root);
 

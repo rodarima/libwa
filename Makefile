@@ -3,10 +3,12 @@ CC := clang
 MODULES := libwa client test
 
 CFLAGS=-g -Wall -Werror -fPIC -I/usr/include
+#CFLAGS=-g -Wall -Werror -fsanitize=address -O1 -fno-omit-frame-pointer -fPIC -I/usr/include
 
 # Search dynamic libraries in the current path
 #LDFLAGS = -Wl,-rpath="\$$ORIGIN"
 LDFLAGS = -Wl,-rpath="."
+#LDFLAGS = -Wl,-rpath="." -fsanitize=address
 
 INSTALL_DIR=/usr
 

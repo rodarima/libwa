@@ -65,16 +65,20 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	cb_t cb =
-	{
-		.ptr = NULL,
-		.priv_msg = cb_priv_msg,
-		.update_user = cb_update_user,
-	};
+	cb_t *cb;
+
+	cb = calloc(sizeof(cb_t), 1);
+
+	cb->priv_msg = cb_priv_msg,
+	cb->update_user = cb_update_user,
 
 	getcwd(config_dir, PATH_MAX);
 
-	wa = wa_init(&cb, config_dir);
+	strcat(config_dir, "/config");
+
+	wa = wa_init(cb, config_dir);
+
+	printf("s->path %s\n", wa->s->path);
 
 	wa_login(wa);
 

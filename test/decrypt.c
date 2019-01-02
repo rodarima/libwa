@@ -73,12 +73,12 @@ decrypt(char *fpath)
 	buf.ptr = (unsigned char*) ptr;
 	buf.len = len;
 
-	printf("In:\n");
+	fprintf(stderr, "In:\n");
 	buf_hexdump(&buf);
 
 	out = crypto_decrypt_buf(c, &buf);
 
-	printf("Out:\n");
+	fprintf(stderr, "Out:\n");
 	buf_hexdump(out);
 
 	bn = bnode_from_buf(out);

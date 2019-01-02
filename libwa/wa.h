@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <uthash.h>
 #include <time.h>
+#include <stdint.h>
 
 #include "ws.h"
 #include "msg.h"
@@ -11,6 +12,7 @@
 #include "crypto.h"
 #include "dispatcher.h"
 #include "storage.h"
+#include "msg_queue.h"
 
 #define MAX_QUEUE 10
 
@@ -21,6 +23,9 @@ enum wa_state
 	WA_STATE_WAIT_CHALLENGE,
 	WA_STATE_SENT_CHALLENGE,
 	WA_STATE_LOGIN_FAILED,
+	WA_STATE_CONTACTS_RECEIVED,
+	WA_STATE_BEFORE_RECEIVED,
+	WA_STATE_LAST_RECEIVED,
 	WA_STATE_READY,
 };
 
@@ -36,9 +41,12 @@ typedef struct
 typedef struct
 {
 	char *text;
+	char *jid;
+	char *msg_id;
 	user_t *from;
 	user_t *to;
 	int from_me;
+	uint64_t timestamp;
 } priv_msg_t;
 
 typedef struct
@@ -78,9 +86,12 @@ typedef struct
 	int msg_counter;
 	int tag_counter;
 	time_t login_time;
+	uint64_t last_forwarded;
+	uint64_t last_timestamp; /* For local evaluation only */
 	dispatcher_t *d;
 	crypto_t *c;
 	store_t *s;
+	mq_t *mq;
 	cb_t *cb;
 } wa_t;
 

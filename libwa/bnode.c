@@ -735,13 +735,56 @@ bnode_free(bnode_t *b)
 	free(b);
 }
 
+const char *
+bnode_attr_get(bnode_t *bn, const char *key)
+{
+	json_object *jval;
+	const char *val;
+
+	if(!bn->attr)
+		return NULL;
+
+
+	jval = json_object_object_get(bn->attr, key);
+	if(!jval)
+		return NULL;
+
+	val = json_object_get_string(jval);
+	assert(val);
+
+	return val;
+}
+
+int
+bnode_attr_exists(bnode_t *bn, const char *key, const char *value)
+{
+	json_object *jval;
+	const char *val;
+
+	if(!bn->attr)
+		return 0;
+
+
+	jval = json_object_object_get(bn->attr, key);
+	if(!jval)
+		return 0;
+
+	val = json_object_get_string(jval);
+	assert(val);
+
+	if(strcmp(val, value) != 0)
+		return 0;
+
+	return 1;
+}
+
 bnode_t *
 read_bnode(parser_t *p)
 {
 	bnode_t *bn;
 	int tag, desc_tag, size, attr_len;
 
-	bn = malloc(sizeof(bnode_t));
+	bn = calloc(sizeof(bnode_t), 1);
 	assert(bn);
 
 	bn->type = BNODE_EMPTY;
@@ -831,6 +874,49 @@ print_attr(bnode_t *bn, int indent)
 	fprintf(stderr, "%s}\n", pad);
 	free(pad);
 
+	return 0;
+}
+
+int
+bnode_summary(bnode_t *bn, int indent)
+{
+	struct json_object_iterator it;
+	struct json_object_iterator it_end;
+	struct json_object* obj;
+	int i;
+
+	for (i=0; i<indent; i++)
+		fprintf(stderr, ".");
+
+	fprintf(stderr, "<%s", bn->desc);
+
+	if(bn->attr)
+	{
+		obj = bn->attr;
+		it = json_object_iter_begin(obj);
+		it_end = json_object_iter_end(obj);
+
+		while (!json_object_iter_equal(&it, &it_end))
+		{
+			fprintf(stderr, ",%s:%s",
+					json_object_iter_peek_name(&it),
+					json_object_get_string(
+						json_object_iter_peek_value(&it)));
+
+			json_object_iter_next(&it);
+		}
+	}
+
+	fprintf(stderr, "|len=%d,type=%s>\n", bn->len,
+		bnode_type_str[bn->type]);
+
+	if(bn->type == BNODE_LIST)
+	{
+		for(i=0; i < bn->len; i++)
+		{
+			bnode_summary(bn->data.list[i], indent + 2);
+		}
+	}
 	return 0;
 }
 

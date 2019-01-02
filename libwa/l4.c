@@ -21,6 +21,7 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 	priv_msg_t *pm;
 	user_t *remote;
 	int ret;
+	char *last_msg_id;
 
 	key = wmi->key;
 
@@ -43,10 +44,6 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 			LOG_WARN("Remote jid not found: %s\n", key->remotejid);
 		}
 
-		if(wmi->has_status)
-		{
-			LOG_WARN("Status = %d\n", wmi->status);
-		}
 		return -1;
 	}
 
@@ -58,8 +55,45 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 		return -1;
 	}
 
+	if(key->has_fromme && key->fromme)
+	{
+		/* We ignore those by now, as we assume that sent messages are
+		 * already read */
+
+		LOG_WARN("Ignoring already sent msg to jid:%s\n",
+			key->remotejid);
+		return -1;
+	}
+
+	if(wmi->has_status)
+	{
+		LOG_WARN("Received msg with status = %d\n", wmi->status);
+	}
+
+	last_msg_id = storage_user_read(wa->s, key->remotejid, "last");
+
+	if(last_msg_id)
+	{
+		if(strcmp(last_msg_id, key->id) != 0)
+		{
+			/* The message is not the last one received */
+		}
+	}
+
+//	if(wmi->has_messagetimestamp && (wmi->messagetimestamp <= wa->last_forwarded))
+//	{
+//		LOG_WARN("Ignoring previous msg from jid:%s with timestamp %lu\n",
+//			key->remotejid, wmi->messagetimestamp);
+//		return -1;
+//	}
+//
+//	wa->last_forwarded = wmi->messagetimestamp;
+//	LOG_DEBUG("Update wa->last_forwarded = %lu\n", wa->last_forwarded);
+
 	pm = malloc(sizeof(priv_msg_t));
 	assert(pm);
+
+	pm->timestamp = wmi->messagetimestamp;
 
 	if(!msg->conversation)
 	{
@@ -81,7 +115,7 @@ parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
 		pm->from = remote;
 		pm->to = wa->me;
 		pm->from_me = 0;
-		LOG_INFO("Priv msg received from %s : %s\n",
+		LOG_DEBUG("Priv msg received from %s : %s\n",
 				pm->from->name, pm->text);
 	}
 

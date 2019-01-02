@@ -4,11 +4,11 @@
 
 typedef struct
 {
-	const char *path;
+	char *path;
 } store_t;
 
 store_t *
-storage_init(const char *path);
+wa_storage_init(const char *path);
 
 void
 storage_free(store_t *s);
@@ -18,3 +18,9 @@ storage_read(store_t *s, const char *key, json_object **obj);
 
 int
 storage_write(store_t *s, const char *key, json_object *obj);
+
+int
+storage_user_write(store_t *s, char *jid, char *key, char *value);
+
+char *
+storage_user_read(store_t *s, char *jid, char *key);

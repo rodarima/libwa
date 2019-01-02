@@ -37,6 +37,9 @@ typedef struct bnode_t bnode_t;
 int
 bnode_print(bnode_t *bn, int indent);
 
+int
+bnode_summary(bnode_t *bn, int indent);
+
 bnode_t *
 bnode_from_buf(const buf_t *buf);
 
@@ -48,5 +51,11 @@ bnode_free(bnode_t *b);
 
 int
 bnode_attr_add(bnode_t *b, char *key, char *val);
+
+const char *
+bnode_attr_get(bnode_t *bn, const char *key);
+
+int
+bnode_attr_exists(bnode_t *bn, const char *key, const char *value);
 
 #endif
