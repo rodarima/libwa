@@ -8,3 +8,4 @@ wac: $(obj) libwa.a
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(LDLIBS) $^
 
 BIN += wac
+SRC += $(src)

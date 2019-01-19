@@ -2,6 +2,7 @@
 #include <unistd.h>
 
 #include "wa.h"
+#include "l1.h" /* TODO: remove this */
 
 char *jid = NULL;
 wa_t *wa = NULL;
@@ -27,6 +28,9 @@ input_worker(void *ptr)
 {
 	char *line;
 	size_t len;
+
+	fprintf(stderr, "Sending presence subscription\n");
+	l1_presence_subscribe(wa, jid);
 
 	while(1)
 	{
@@ -88,6 +92,7 @@ main(int argc, char *argv[])
 		wa_dispatch(wa, 50);
 	}
 
+	fprintf(stderr, "Client ready\n");
 	pthread_create(&th, NULL, input_worker, NULL);
 
 	while(wa->run && client_run)

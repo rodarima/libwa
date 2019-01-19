@@ -488,3 +488,4 @@ l3_send_seen(wa_t *wa, char *jid, char *id)
 
 	return ret;
 }
+

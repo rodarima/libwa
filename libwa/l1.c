@@ -10,7 +10,7 @@
 #include "wa.h"
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_INFO
+#define DEBUG LOG_LEVEL_DEBUG
 
 #include "log.h"
 
@@ -202,6 +202,30 @@ l1_recv_cmd(wa_t *wa, struct json_object *array)
 }
 
 static int
+l1_recv_presence(wa_t *wa, struct json_object *array)
+{
+	struct json_object *arg;
+	const char *type, *jid;
+
+	arg = json_object_array_get_idx(array, 1);
+	assert(arg);
+	assert(json_object_is_type(arg, json_type_object));
+
+	type = json_object_get_string(
+			json_object_object_get(arg, "type"));
+
+	jid = json_object_get_string(
+			json_object_object_get(arg, "id"));
+
+	if(!type || !jid)
+		return -1;
+
+	LOG_WARN("User %s is %s\n", jid, type);
+
+	return 0;
+}
+
+static int
 l1_recv_json_array(wa_t *wa, struct json_object *array)
 {
 	struct json_object* action_obj;
@@ -216,6 +240,8 @@ l1_recv_json_array(wa_t *wa, struct json_object *array)
 		return l1_recv_conn(wa, array);
 	else if(strcmp(action, "Cmd") == 0)
 		return l1_recv_cmd(wa, array);
+	else if(strcmp(action, "Presence") == 0)
+		return l1_recv_presence(wa, array);
 
 	return 0;
 }
@@ -251,7 +277,7 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 		return l1_recv_msg_bin(wa, msg);
 	}
 
-	LOG_DEBUG("JSON RECV: %s\n", ((char *) msg->cmd));
+	LOG_INFO("JSON RECV: %s\n", ((char *) msg->cmd));
 
 	if(json_object_is_type(jo, json_type_array))
 	{
@@ -319,9 +345,9 @@ l1_send_keep_alive(wa_t *wa)
 }
 
 int
-l1_presence_suscribe(wa_t *wa, char *jid)
+l1_presence_subscribe(wa_t *wa, char *jid)
 {
-	msg_t *msg, *res;
+	msg_t *msg;
 
 	msg = malloc(sizeof(msg_t));
 
@@ -329,14 +355,9 @@ l1_presence_suscribe(wa_t *wa, char *jid)
 	asprintf((char **) &msg->cmd, ",[\"action\",\"presence\",\"subscribe\",\"%s\"]", jid);
 	msg->len = strlen(msg->cmd);
 
-	res = dispatch_request(wa->d, msg, 0);
-
-	if(!res)
+	if(dispatch_send_msg(wa->d, msg, 0))
 		return -1;
 
-	free(res->cmd);
-	free(res->tag);
-	free(res);
 	free(msg->tag);
 	free(msg->cmd);
 	free(msg);

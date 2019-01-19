@@ -68,4 +68,4 @@ int
 l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag);
 
 int
-l1_presence_suscribe(wa_t *wa, char *jid);
+l1_presence_subscribe(wa_t *wa, char *jid);
