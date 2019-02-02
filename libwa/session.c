@@ -36,6 +36,7 @@ session_update_user(wa_t *w, user_t *u)
 		f->notify = u->notify;
 		f->jid = u->jid;
 		free(u);
+		u = f;
 	}
 	else
 	{
