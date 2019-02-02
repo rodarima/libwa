@@ -82,8 +82,6 @@ main(int argc, char *argv[])
 
 	wa = wa_init(cb, config_dir);
 
-	printf("s->path %s\n", wa->s->path);
-
 	wa_login(wa);
 
 	/* Wait until we receive the contact list */

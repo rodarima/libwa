@@ -168,8 +168,6 @@ wa_login(wa_t *wa)
 {
 	int restore_failed;
 
-	printf("s->path %s\n", wa->s->path);
-
 	restore_failed = (session_restore(wa) != 0);
 
 	if(restore_failed)

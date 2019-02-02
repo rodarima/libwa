@@ -67,8 +67,6 @@ wa_storage_init(const char *path)
 	s = malloc(sizeof(store_t));
 	s->path = strdup(path);
 
-	LOG_INFO("s->path is now %s\n", s->path);
-
 	return s;
 }
 
@@ -84,8 +82,6 @@ storage_read(store_t *s, const char *key, json_object **obj)
 {
 	char *path;
 	json_object *root;
-
-	LOG_INFO("path = %s\n", s->path);
 
 	path = path_from_key(s, key);
 	root = json_object_from_file(path);

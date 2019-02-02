@@ -123,8 +123,6 @@ session_restore(wa_t *wa)
 {
 	json_object *root, *v;
 
-	printf("s->path %s\n", wa->s->path);
-
 	if(storage_read(wa->s, SESSION_KEY, &root))
 	{
 		return -1;
