@@ -133,7 +133,7 @@ write_int(parser_t *p, size_t len, size_t v)
 {
 	/* Always big endian */
 
-	int i;
+	size_t i;
 
 	assert((0 < len) && (len <= 4));
 
@@ -256,7 +256,7 @@ write_attr(parser_t *p, json_object *attr)
 int
 write_bnode_list(parser_t *p, bnode_t **list, size_t len)
 {
-	int i;
+	size_t i;
 
 	write_list_head(p, len);
 
@@ -366,7 +366,7 @@ bnode_attr_add(bnode_t *b, char *key, char *val)
 int
 read_int(parser_t *p, size_t len)
 {
-	int i, v = 0;
+	size_t i, v = 0;
 
 	assert((0 < len) && (len <= 4));
 	assert(p->ptr + len <= p->end);
@@ -374,7 +374,7 @@ read_int(parser_t *p, size_t len)
 	v = p->ptr[0];
 	LOG_DEBUG("v=%02X (%d) len=%ld\n", v, v, len);
 
-	for(i=1; i < len; i++)
+	for(i = 1; i < len; i++)
 	{
 		v = v << 8;
 		v |= p->ptr[i];
@@ -444,9 +444,9 @@ read_packed(parser_t *p, char table[])
 	{
 		b = read_int(p, 1);
 		nibble = (b & 0xF0) >> 4;
-		buf[j++] = nibble_table[nibble];
+		buf[j++] = table[nibble];
 		nibble = b & 0x0F;
-		buf[j++] = nibble_table[nibble];
+		buf[j++] = table[nibble];
 	}
 
 	/* The original code has this part switched, but it makes no sense */
@@ -587,10 +587,14 @@ read_attr(parser_t *p, int len)
 }
 
 int
-bnode_string(parser_t *p, bnode_t *bn, char *str)
+bnode_string(bnode_t *bn, char *str)
 {
+	size_t len;
+
+	len = strlen(str);
+
 	bn->type = BNODE_STRING;
-	bn->len = strlen(str);
+	bn->len = len;
 	bn->data.str = str;
 
 	return 0;
@@ -600,28 +604,28 @@ int
 bnode_packed(parser_t *p, bnode_t *bn)
 {
 	char *jid = read_jid_pair(p);
-	return bnode_string(p, bn, jid);
+	return bnode_string(bn, jid);
 }
 
 int
 bnode_hex(parser_t *p, bnode_t *bn)
 {
 	char *str = read_hex(p);
-	return bnode_string(p, bn, str);
+	return bnode_string(bn, str);
 }
 
 int
 bnode_nibbles(parser_t *p, bnode_t *bn)
 {
 	char *str = read_nibbles(p);
-	return bnode_string(p, bn, str);
+	return bnode_string(bn, str);
 }
 
 int
 bnode_jid_pair(parser_t *p, bnode_t *bn)
 {
 	char *jid = read_jid_pair(p);
-	return bnode_string(p, bn, jid);
+	return bnode_string(bn, jid);
 }
 
 int

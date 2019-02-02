@@ -493,7 +493,7 @@ crypto_encrypt_buf(crypto_t *c, buf_t *in)
 	EVP_EncryptFinal_ex(ctx, enc + enc_bytes, &final_bytes);
 	enc_bytes += final_bytes;
 
-	assert(enc_bytes <= out_len + extra_room - padding);
+	assert(((size_t) enc_bytes) <= out_len + extra_room - padding);
 
 	/* We shrink the out buffer to ignore the unused extra room */
 	out->len = padding + enc_bytes;

@@ -2,8 +2,10 @@
 CC := clang
 MODULES := libwa client test
 
-CFLAGS=-g -Wall -Werror -fPIC -I/usr/include
+CFLAGS=-g -Wall -Wextra -fPIC -I/usr/include
 #CFLAGS=-g -Wall -Werror -fsanitize=address -O1 -fno-omit-frame-pointer -fPIC -I/usr/include
+CFLAGS+=-Werror
+CFLAGS+=-Wno-unused-parameter # Avoid a lot of false positives by now
 
 # Search dynamic libraries in the current path
 #LDFLAGS = -Wl,-rpath="\$$ORIGIN"
@@ -34,7 +36,7 @@ include $(OBJ:.o=.d)
 
 # calculate C include dependencies
 %.d: %.c
-	gcc -MM -MG $(CFLAGS) $*.c \
+	gcc -MM -MG $*.c \
 	| sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
 all: $(BIN)

@@ -256,7 +256,8 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 
 	struct json_tokener *tok = json_tokener_new();
 	struct json_object *jo = json_tokener_parse_ex(tok, msg->cmd, msg->len);
-	int ret, offset;
+	int ret;
+	size_t offset;
 
 	offset = tok->char_offset;
 
@@ -269,7 +270,7 @@ l1_recv_msg(wa_t *wa, msg_t *msg)
 
 	if(offset != msg->len)
 	{
-		LOG_INFO("Partial json detected. char_offset=%d, len=%ld\n",
+		LOG_INFO("Partial json detected. char_offset=%ld, len=%ld\n",
 				offset, msg->len);
 
 		json_object_put(jo);

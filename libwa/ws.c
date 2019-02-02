@@ -117,8 +117,18 @@ callback(struct lws* wsi, enum lws_callback_reasons reason, void *user,
 
 static struct lws_protocols protocols[] =
 {
-	{ "test", callback, 0, 0 } ,
-	{ NULL, NULL, 0 }
+	{
+		.name = "test",
+		.callback = callback,
+		.per_session_data_size = 0,
+		.rx_buffer_size=0
+	},
+	{
+		.name = NULL,
+		.callback = NULL,
+		.per_session_data_size = 0,
+		.rx_buffer_size=0
+	}
 };
 
 int ws_connect(ws_t *ws)
@@ -220,8 +230,9 @@ void *ws_worker(void *arg)
 int
 ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin)
 {
-	int sent, mode;
+	int mode;
 	double t;
+	int ret;
 
 	t = tic();
 
@@ -246,7 +257,8 @@ ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin)
 
 	LOG_DEBUG("Flag ws->canwrite locked in %f s\n", tic() - t);
 
-	sent = lws_write(ws->wsi, (unsigned char *) buf, len, mode);
+	ret = lws_write(ws->wsi, (unsigned char *) buf, len, mode);
+
 
 	/* Request writ(e)able callback, to put "can_write" to one again*/
 	lws_callback_on_writable(ws->wsi);
@@ -257,13 +269,13 @@ ws_send_buf(ws_t *ws, char *buf, size_t len, int is_bin)
 	pthread_mutex_unlock(ws->send_lock);
 	LOG_DEBUG("Unlocked ws->send_lock\n");
 
-	if(sent != len)
+	if(len != ((size_t) ret))
 	{
 		fprintf(stderr, "%s: lws_write failed\n", __func__);
 		return -1;
 	}
 
-	return sent;
+	return ret;
 }
 
 int

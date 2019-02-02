@@ -29,12 +29,12 @@ buf_free(buf_t *buf)
 void
 hexdump(const unsigned char *buf, const size_t len)
 {
-	int i,j;
+	size_t i,j,p;
 	for(i=0; i< 1 + (len-1)/16; i++)
 	{
 		for(j=0; j<16; j++)
 		{
-			int p = i*16 + j;
+			p = i*16 + j;
 			if(p < len)
 				fprintf(stderr, "%02X ", (unsigned char) buf[p]);
 			else
@@ -46,7 +46,7 @@ hexdump(const unsigned char *buf, const size_t len)
 		fprintf(stderr, "  ");
 		for(j=0; j<16; j++)
 		{
-			int p = i*16 + j;
+			p = i*16 + j;
 			if(p < len)
 			{
 				if(isprint(buf[p]))
