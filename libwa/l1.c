@@ -10,7 +10,7 @@
 #include "wa.h"
 #include "session.h"
 
-#define DEBUG LOG_LEVEL_DEBUG
+#define DEBUG LOG_LEVEL_INFO
 
 #include "log.h"
 
@@ -307,19 +307,30 @@ l1_send_keep_alive(wa_t *wa)
 	//int r, rmin = 20, rmax = 90;
 	int r, rmin = 10, rmax = 30;
 
-	if(wa->state != WA_STATE_LOGGED_IN)
+	LOG_DEBUG("Called keep alive\n");
+
+	if(wa->state < WA_STATE_LOGGED_IN)
+	{
+		LOG_DEBUG("keep_alive: Not logged in %d\n", wa->state);
 		return 0;
+	}
 
 	clock_gettime(CLOCK_REALTIME, &ts);
 
 	if(wa->keep_alive_next > ts.tv_sec)
+	{
+		LOG_DEBUG("keep_alive: not yet %ld <= %ld\n",
+				wa->keep_alive_next, ts.tv_sec);
 		return 0;
+	}
 
 	r = rmin + (rand() % (rmax - rmin));
 
 	if(wa->keep_alive_next == 0)
 	{
 		wa->keep_alive_next = ts.tv_sec + r;
+		LOG_DEBUG("keep_alive: Setting next to %ld\n",
+				wa->keep_alive_next);
 		return 0;
 	}
 
