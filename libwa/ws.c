@@ -3,7 +3,8 @@
 #include <libwebsockets.h>
 #include <string.h>
 
-#define WS_URL "wws://w1.web.whatsapp.com/ws"
+#define WS_HOST "web.whatsapp.com"
+#define WS_PATH "/ws"
 #define WS_ORIGIN "https://web.whatsapp.com"
 
 #include "ws.h"
@@ -164,12 +165,12 @@ int ws_connect(ws_t *ws)
 
 	info.ssl_connection = LCCSCF_USE_SSL;
 	//| LCCSCF_ALLOW_SELFSIGNED;
-	info.host = "w1.web.whatsapp.com";
+	info.host = WS_HOST;
 	info.port = 443;
 #endif
 	info.address = info.host;
-	info.path = "/ws";
-	info.origin = "https://web.whatsapp.com";
+	info.path = WS_PATH;
+	info.origin = WS_ORIGIN;
 
 	/* Here we set the pointer to our own data, available in the callback */
 	info.userdata = (void *) ws;
