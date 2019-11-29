@@ -17,7 +17,7 @@ INSTALL_DIR=/usr
 all:
 
 # look for include files in each of the modules
-CFLAGS += $(patsubst %,-I%,$(MODULES))
+CFLAGS += $(patsubst %,-I%,$(MODULES)) -I.
 
 LDLIBS :=
 BIN :=
