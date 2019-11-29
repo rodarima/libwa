@@ -375,7 +375,7 @@ read_int(parser_t *p, size_t len)
 	assert(p->ptr + len <= p->end);
 
 	v = p->ptr[0];
-	LOG_DEBUG("v=%02X (%d) len=%ld\n", v, v, len);
+	LOG_DEBUG("v=%02lX (%ld) len=%ld\n", v, v, len);
 
 	for(i = 1; i < len; i++)
 	{
