@@ -61,7 +61,10 @@ char *token_table[] = {
 	"invite","gif","vcard","frequent","privacy","blacklist","whitelist",
 	"verify","location","document","elapsed","revoke_invite","expiration",
 	"unsubscribe","disable","vname","old_jid","new_jid","announcement",
-	"locked","prop","label","color","call","offer","call-id"
+	"locked","prop","label","color","call","offer","call-id",
+	"quick_reply","sticker","pay_t","accept","reject","sticker_pack",
+	"invalid","canceled","missed","connected","result","audio","video",
+	"recent"
 };
 
 typedef struct {
@@ -514,8 +517,17 @@ read_string(parser_t *p, int tag)
 	 * I simply changed the host in the token_table.
 	 */
 
+
 	if((tag >= 3) && (tag <= 235))
+	{
+		if(tag >= (int) (sizeof(token_table)/sizeof(char *)))
+		{
+			LOG_ERR("Unknown tag %d\n", tag);
+			return "<UNKNOWN>";
+		}
+
 		return strdup(token_table[tag]);
+	}
 
 	switch(tag)
 	{
