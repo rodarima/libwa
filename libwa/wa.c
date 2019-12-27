@@ -15,7 +15,7 @@
 #define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
 
-#define WA_WEB_VERSION "[0,3,3324]"
+#define WA_WEB_VERSION "[0,3,9309]"
 #define WA_WEB_CLIENT "[\"libwa\",\"Chromium\"]"
 
 
