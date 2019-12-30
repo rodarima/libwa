@@ -1,19 +1,21 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <json-c/json.h>
+#include <assert.h>
 
 #include "l1.h" /* For metric and flag... FIXME */
-#include "l2.h"
 #include "l3.h"
+#include "wire.h"
 
 #include "wa.h"
 #include "bnode.h"
 #include "session.h"
-#include "l4.h"
 #include "chat.h"
+#include "monitor.h"
 
 #define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
+#include "utils.h"
 
 int
 l3_recv_bnode(wa_t *wa, bnode_t *bn);
@@ -217,10 +219,19 @@ l3_recv_action(wa_t *wa, bnode_t *bn)
 int
 l3_recv_message(wa_t *wa, bnode_t *bn, int last)
 {
+	dg_t *dg;
 
 	//LOG_INFO("Received msg bnode:\n");
 	//bnode_print(bn, 0);
-	return l4_recv_msg(wa, bn->data.bytes, bn->len, last);
+
+	dg = dg_cmd(L3, L4, "recv_message");
+	dg_meta_set_int(dg, "last", last);
+
+	dg->data = safe_malloc(sizeof(buf_t));
+	dg->data->ptr = bn->data.bytes; 
+	dg->data->len = bn->len; 
+
+	return wire_handle(wa, dg);
 }
 
 int
@@ -303,30 +314,16 @@ l3_recv_bnode(wa_t *wa, bnode_t *bn)
 	return 0;
 }
 
-int
-l3_recv_msg(wa_t *wa, msg_t *msg)
+static int
+l3_recv_dg(wa_t *wa, dg_t *dg)
 {
-	bnode_t *bn_l3;
-	buf_t *buf;
+	bnode_t *bn;
 	int ret;
 
-	buf = malloc(sizeof(buf_t));
-	assert(buf);
-	buf->ptr = msg->cmd;
-	buf->len = msg->len;
+	bn = bnode_from_buf(dg->data);
+	ret = l3_recv_bnode(wa, bn);
 
-	bn_l3 = bnode_from_buf(buf);
-
-	free(buf);
-
-
-	//LOG_DEBUG("Received msg at l3, bnode is:\n");
-	//bnode_print(bn_l3, 0);
-
-	ret = l3_recv_bnode(wa, bn_l3);
-
-	/* TODO: Free the bnode when we know is needed */
-	//bnode_free(bn_l3);
+	bnode_free(bn);
 
 	return ret;
 }
@@ -360,7 +357,13 @@ l3_send_relay(wa_t *wa, bnode_t *child, char *tag)
 
 	out = bnode_to_buf(b);
 
-	ret = l2_send_buf(wa, out, tag, METRIC_MESSAGE, FLAG_IGNORE);
+	dg_t *dg = dg_cmd(L3, L2, "send");
+	dg_meta_set_int(dg, "metric", METRIC_MESSAGE);
+	dg_meta_set_int(dg, "flag", FLAG_IGNORE);
+	dg_meta_set(dg, "tag", tag);
+	dg->data = out;
+
+	ret = wire_handle(wa, dg);
 
 	free(b);
 	/*free(buf); Not here */
@@ -371,11 +374,22 @@ l3_send_relay(wa_t *wa, bnode_t *child, char *tag)
 }
 
 int
-l3_send_relay_msg(wa_t *wa, buf_t *buf, char *tag)
+l3_send_relay_message(wa_t *wa, dg_t *dg)
 {
 	bnode_t *b;
 	int ret;
+	char *tag;
 
+	/* The id of the message is used as tag */
+	tag = dg_meta_get(dg, "tag");
+
+	if(!tag)
+	{
+		LOG_ERR("Expecting the 'tag' key in metadata\n");
+		return 1;
+	}
+
+	/* FIXME: Use safe memory */
 	b = malloc(sizeof(bnode_t));
 	assert(b);
 
@@ -383,18 +397,19 @@ l3_send_relay_msg(wa_t *wa, buf_t *buf, char *tag)
 	b->attr = NULL;
 
 	b->type = BNODE_BINARY;
-	b->data.bytes = buf->ptr;
-	b->len = buf->len;
+	b->data.bytes = dg->data->ptr;
+	b->len = dg->data->len;
 
 	ret = l3_send_relay(wa, b, tag);
 
+	/* FIXME: Proper free of bnode */
 	free(b);
 
 	return ret;
 }
 
-int
-l3_send_seen(wa_t *wa, char *jid, char *id)
+static int
+l3_send_seen(wa_t *wa, dg_t *dg_in)
 {
 	/* Send the following:
 	 *
@@ -428,11 +443,19 @@ l3_send_seen(wa_t *wa, char *jid, char *id)
 	 * }
 	 * */
 
+	dg_t *dg;
 	bnode_t *root, *child;
 	int ret;
-	char *epoch;
-	int metric, flags;
-	buf_t *out;
+	char *epoch, *jid, *id;
+
+	jid = dg_meta_get(dg_in, "jid");
+	id = dg_meta_get(dg_in, "id");
+
+	if(!jid || !id)
+	{
+		LOG_ERR("Missing 'jid' or 'id' in metadata\n");
+		return 1;
+	}
 
 	asprintf(&epoch, "%d", wa->msg_counter++);
 
@@ -463,10 +486,6 @@ l3_send_seen(wa_t *wa, char *jid, char *id)
 
 	root->data.list[0] = child;
 
-	out = bnode_to_buf(root);
-
-	metric = METRIC_READ;
-
 	/* Original flags:
 	 *
 	 * flags = FLAG_EXPIRES | FLAG_SKIP_OFFLINE;
@@ -474,18 +493,61 @@ l3_send_seen(wa_t *wa, char *jid, char *id)
 	 * But we want an ack to proceed.
 	 */
 
-	flags = FLAG_EXPIRES | FLAG_ACK_REQUEST;
+	dg = dg_cmd(L3, L2, "send");
+	dg_meta_set_int(dg, "metric", METRIC_READ);
+	dg_meta_set_int(dg, "flag", FLAG_EXPIRES | FLAG_ACK_REQUEST);
+	dg->data = bnode_to_buf(root);
 
-	LOG_INFO("Sending seen of msg %s to %s\n", id, jid);
-
-	ret = l2_send_buf(wa, out, NULL, metric, flags);
-
-	bnode_free(root);
+	ret = wire_handle(wa, dg);
 
 	/* The child is automatically free'd */
+	bnode_free(root);
+
 	free(epoch);
 
+	dg_free(dg);
 
 	return ret;
 }
 
+int
+l3_send(wa_t *wa, dg_t *dg)
+{
+	char *cmd;
+
+	cmd = dg_meta_get(dg, "cmd");
+
+	if(!cmd)
+	{
+		LOG_ERR("Malformed datagram without cmd\n");
+		return -1;
+	}
+
+	if(strcmp(cmd, "send_relay_message") == 0)
+		return l3_send_relay_message(wa, dg);
+	else if(strcmp(cmd, "send_seen") == 0)
+		return l3_send_seen(wa, dg);
+
+	LOG_ERR("Unknown cmd in datagram: %s\n", cmd);
+	return -1;
+}
+
+int
+l3_recv(wa_t *wa, dg_t *dg)
+{
+	char *cmd;
+
+	cmd = dg_meta_get(dg, "cmd");
+
+	if(!cmd)
+	{
+		LOG_ERR("Malformed datagram without cmd\n");
+		return -1;
+	}
+
+	if(strcmp(cmd, "recv") == 0)
+		return l3_recv_dg(wa, dg);
+
+	LOG_ERR("Unknown cmd in datagram: %s\n", cmd);
+	return -1;
+}

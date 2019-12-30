@@ -5,6 +5,8 @@
 #include "l4.h"
 #include "l3.h"
 #include "chat.h"
+#include "monitor.h"
+#include "wire.h"
 
 #define DEBUG LOG_LEVEL_DEBUG
 
@@ -14,125 +16,26 @@
 
 
 
+
 static int
-parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
+l4_send_seen(wa_t *wa, char *jid, char *id)
 {
-	Proto__MessageKey *key;
-	Proto__Message *msg;
-	priv_msg_t *pm;
 	int ret;
+	dg_t *dg;
 
-	key = wmi->key;
+	dg = dg_cmd(L4, L3, "send_seen");
+	dg_meta_set(dg, "jid", jid);
+	dg_meta_set(dg, "id", id);
 
-	if(!key)
-	{
-		LOG_WARN("Received msg without key, ignoring\n");
-		return -1;
-	}
+	/* Blocking send */
+	ret = wire_handle(wa, dg);
 
-	LOG_DEBUG("Received msg with key:%s\n", key->id);
-
-	msg = wmi->message;
-
-	if(!msg)
-	{
-		LOG_WARN("%s: message is NULL\n", key->remotejid);
-		return -1;
-	}
-
-	if(!msg->conversation)
-	{
-		LOG_WARN("%s: message text is NULL\n", key->remotejid);
-		return -1;
-	}
-
-	if(wmi->has_status)
-	{
-		LOG_WARN("Received msg with status = %d\n", wmi->status);
-	}
-
-
-	pm = calloc(1, sizeof(priv_msg_t));
-	assert(pm);
-
-	pm->timestamp = wmi->messagetimestamp;
-
-	/* Copy the text, as the whole wmi will be destroyed */
-	pm->text = strdup(msg->conversation);
-
-	pm->jid = strdup(key->remotejid);
-	pm->msg_id = strdup(key->id);
-	/* Contacts may not be ready */
-	//pm->user = remote;
-
-	if(key->has_fromme && key->fromme)
-		pm->from_me = 1;
-
-	ret = chat_recv_priv_msg(wa, pm);
-
-//	if((ret == 0) && (wa->state == WA_STATE_READY))
-//	{
-//		/* Confirm reception, but only after READY state */
-//		l3_send_seen(wa, key->remotejid, key->id);
-//	}
-
-	/* Don't free after the callback, in order to use the data after the
-	 * return */
-	//free(pm);
+	dg_free(dg);
 
 	return ret;
 }
 
-static int
-parse_group_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
-{
-	LOG_INFO("Group msg not implemented: %p\n", wmi);
-	return 0;
-}
-
-int
-l4_recv_msg(wa_t *wa, unsigned char *buf, size_t len, int last)
-{
-	Proto__WebMessageInfo *wmi;
-	int ret;
-
-	wmi = proto__web_message_info__unpack(NULL, len, buf);
-
-	assert(wmi);
-
-	if(!wmi->key)
-	{
-		LOG_WARN("Required field 'key' missing\n");
-		ret = -1;
-		goto err;
-	}
-	else
-	{
-		/* If there is any participant, the message comes from a group */
-		if(wmi->key->participant)
-		{
-			ret = parse_group_msg(wa, wmi);
-		}
-		else
-		{
-			/* Otherwise is a private msg */
-			ret = parse_priv_msg(wa, wmi);
-		}
-	}
-
-	if(last && wa->state >= WA_STATE_CONTACTS_RECEIVED)
-	{
-		LOG_DEBUG("wa->state = %d, flushing chats\n", wa->state);
-		chat_flush(wa);
-	}
-
-err:
-	proto__web_message_info__free_unpacked(wmi, NULL);
-
-	return ret;
-}
-
-char *
+static char *
 random_key()
 {
 	char *l = "0123456789ABCDEF";
@@ -162,7 +65,7 @@ random_key()
 	return key;
 }
 
-int
+static int
 send_priv_msg(wa_t *wa, priv_msg_t *pm)
 {
 
@@ -208,7 +111,11 @@ send_priv_msg(wa_t *wa, priv_msg_t *pm)
 
 	proto__web_message_info__pack(wmi, buf->ptr);
 
-	l3_send_relay_msg(wa, buf, key->id);
+	dg_t *dg = dg_cmd(L4, L3, "send_relay_message");
+	dg_meta_set(dg, "tag", key->id);
+	dg->data = buf;
+
+	wire_handle(wa, dg);
 
 	free(key->id);
 
@@ -247,4 +154,151 @@ l4_send_priv_msg(wa_t *wa, char *to_jid, char *text)
 	return 0;
 }
 
+static int
+parse_group_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
+{
+	LOG_INFO("Group msg not implemented: %p\n", wmi);
+	return 0;
+}
 
+static int
+parse_priv_msg(wa_t *wa, Proto__WebMessageInfo *wmi)
+{
+	Proto__MessageKey *key;
+	Proto__Message *msg;
+	priv_msg_t *pm;
+	int ret;
+
+	key = wmi->key;
+
+	if(!key)
+	{
+		LOG_WARN("Received msg without key, ignoring\n");
+		return -1;
+	}
+
+	LOG_DEBUG("Received msg with key:%s\n", key->id);
+
+	msg = wmi->message;
+
+	if(!msg)
+	{
+		LOG_WARN("%s: message is NULL\n", key->remotejid);
+		return -1;
+	}
+
+	if(!msg->conversation)
+	{
+		LOG_WARN("%s: message text is NULL\n", key->remotejid);
+		return -1;
+	}
+
+	if(wmi->has_status)
+	{
+		LOG_DEBUG("Received msg with status = %d\n", wmi->status);
+	}
+
+
+	pm = calloc(1, sizeof(priv_msg_t));
+	assert(pm);
+
+	pm->timestamp = wmi->messagetimestamp;
+
+	/* Copy the text, as the whole wmi will be destroyed */
+	pm->text = strdup(msg->conversation);
+
+	pm->jid = strdup(key->remotejid);
+	pm->msg_id = strdup(key->id);
+	/* Contacts may not be ready */
+	//pm->user = remote;
+
+	if(key->has_fromme && key->fromme)
+		pm->from_me = 1;
+
+	ret = chat_recv_priv_msg(wa, pm);
+
+	/* TODO: Let the user decide if ack must be sent */
+	if((ret == 0) && (wa->state == WA_STATE_READY))
+	{
+		/* Confirm reception, but only after READY state */
+		l4_send_seen(wa, key->remotejid, key->id);
+	}
+
+	/* Don't free after the callback, in order to use the data after the
+	 * return */
+	//free(pm);
+
+	return ret;
+}
+
+static int
+l4_recv_message(wa_t *wa, dg_t *dg)
+{
+	Proto__WebMessageInfo *wmi;
+	int ret, last;
+
+	if(dg_meta_get_int(dg, "last", &last))
+	{
+		LOG_ERR("Missing 'last' key in metadata\n");
+		return -1;
+	}
+
+	wmi = proto__web_message_info__unpack(
+			NULL, dg->data->len, dg->data->ptr);
+
+	if(!wmi)
+	{
+		LOG_ERR("Protobuf unpack failed\n");
+		return -1;
+	}
+
+	if(!wmi->key)
+	{
+		LOG_WARN("Required field 'key' missing\n");
+		ret = -1;
+		goto err;
+	}
+
+	/* If there is any participant, the message comes from a group */
+	if(wmi->key->participant)
+	{
+		ret = parse_group_msg(wa, wmi);
+	}
+	else
+	{
+		/* Otherwise is a private msg */
+		ret = parse_priv_msg(wa, wmi);
+	}
+
+	if(last && wa->state >= WA_STATE_CONTACTS_RECEIVED)
+	{
+		LOG_DEBUG("wa->state = %d, flushing chats\n", wa->state);
+		chat_flush(wa);
+	}
+
+err:
+	proto__web_message_info__free_unpacked(wmi, NULL);
+
+	return ret;
+}
+
+
+int
+l4_recv(wa_t *wa, dg_t *dg)
+{
+	char *cmd;
+
+	cmd = dg_meta_get(dg, "cmd");
+
+	if(!cmd)
+	{
+		LOG_ERR("Malformed internal datagram without cmd\n");
+		return -1;
+	}
+
+	if(strcmp(cmd, "recv_message") == 0)
+		return l4_recv_message(wa, dg);
+
+	LOG_ERR("Unknown cmd in internal datagram: %s\n", cmd);
+	return -1;
+}

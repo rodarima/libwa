@@ -166,3 +166,4 @@ chat_flush(wa_t *wa)
 
 	return 0;
 }
+

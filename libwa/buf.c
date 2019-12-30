@@ -30,6 +30,10 @@ void
 hexdump(const unsigned char *buf, const size_t len)
 {
 	size_t i,j,p;
+
+	if(len == 0)
+		return;
+
 	for(i=0; i< 1 + (len-1)/16; i++)
 	{
 		for(j=0; j<16; j++)

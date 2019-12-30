@@ -3,6 +3,7 @@
 #include "wa.h"
 #include "buf.h"
 #include "msg.h"
+#include "dg.h"
 
 /* TODO: mode this two enum into a better place */
 
@@ -59,13 +60,16 @@ enum flag {
 };
 
 int
+l1_send(wa_t *wa, dg_t *dg);
+
+int
+l1_recv(wa_t *wa, dg_t *dg);
+
+int
 l1_recv_msg(wa_t *wa, msg_t *msg);
 
 int
-l1_send_keep_alive(wa_t *wa);
-
-int
-l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag);
-
-int
 l1_presence_subscribe(wa_t *wa, char *jid);
+
+int
+l1_send_keep_alive(wa_t *wa);

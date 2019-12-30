@@ -1,51 +1,81 @@
 #include "wa.h"
-#include "msg.h"
 #include "crypto.h"
 
-#include "l1.h"
 #include "l2.h"
-#include "l3.h"
+#include "wire.h"
 
 #define DEBUG LOG_LEVEL_ERR
 #include "log.h"
 
 int
-l2_recv_msg(wa_t *wa, msg_t *msg_l1)
+l2_recv(wa_t *wa, dg_t *dg)
 {
-	msg_t *msg_l2;
 	int ret;
+	buf_t *buf, *tmp;
 
 	/* It seems the only kind of messages inside a encrypted binary message
 	 * are bnode messages */
 
-	msg_l2 = crypto_decrypt_msg(wa->c, msg_l1);
+	/* FIXME: This ugly hack avoids double serialization here... */
+	tmp = dg->data;
+	dg->dst = L3;
+	dg->src = L2;
 
-	ret = l3_recv_msg(wa, msg_l2);
-	free(msg_l2->tag);
-	free(msg_l2->cmd);
-	free(msg_l2);
+	if(dg->data)
+	{
+		buf = crypto_decrypt_buf(wa->c, dg->data);
+
+		if(!buf)
+		{
+			LOG_ERR("Decryption failed\n");
+			return 1;
+		}
+
+		dg->data = buf;
+	}
+
+	ret = wire_handle(wa, dg);
+
+	if(dg->data)
+		buf_free(dg->data);
+
+	/* Leave the original data */
+	dg->data = tmp;
 
 	return ret;
 }
 
 int
-l2_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flags)
+l2_send(wa_t *wa, dg_t *dg)
 {
-	int ret = 0;
-	buf_t *out;
+	int ret;
+	buf_t *out, *tmp;
 
-	out = crypto_encrypt_buf(wa->c, in);
+	/* FIXME: This ugly hack avoids double serialization here... */
+	tmp = dg->data;
+	dg->dst = L1;
+	dg->src = L2;
 
-	ret = l1_send_buf(wa, out, tag, metric, flags);
+	if(dg->data)
+	{
+		out = crypto_encrypt_buf(wa->c, dg->data);
 
-	buf_free(out);
+		if(!out)
+		{
+			LOG_ERR("Encryption failed\n");
+			return 1;
+		}
+
+		dg->data = out;
+	}
+
+	ret = wire_handle(wa, dg);
+
+	if(dg->data)
+		buf_free(dg->data);
+
+	/* Leave the original buf */
+	dg->data = tmp;
 
 	return ret;
-}
-
-int
-l2_send_plain(wa_t *wa, buf_t *in, char *tag, int metric, int flags)
-{
-	/* Dummy function */
-	return l1_send_buf(wa, in, tag, metric, flags);
 }

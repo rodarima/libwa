@@ -3,7 +3,6 @@
 #include <json-c/json.h>
 
 #include "bnode.h"
-#include "msg.h"
 #include "crypto.h"
 
 #define DEBUG LOG_LEVEL_ERR
@@ -995,24 +994,3 @@ bnode_print(bnode_t *bn, int indent)
 
 	return 0;
 }
-
-//int
-//bnode_print_msg(msg_t *msg)
-//{
-//	bnode_t *bn = bnode_parse_msg(msg);
-//
-//	return bnode_print(bn, 0);
-//}
-//
-//#include "test/msg.h"
-//int
-//main()
-//{
-//	msg_t *msg = malloc(sizeof(msg_t));
-//	msg->cmd = msg2;
-//	msg->len = msg2_len;
-//
-//	bnode_print_msg(msg);
-//
-//	return 0;
-//}

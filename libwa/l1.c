@@ -4,8 +4,7 @@
 #include <assert.h>
 
 #include "l1.h"
-#include "l2.h"
-
+#include "wire.h"
 
 #include "wa.h"
 #include "session.h"
@@ -13,26 +12,107 @@
 #define DEBUG LOG_LEVEL_INFO
 
 #include "log.h"
+#include "utils.h"
 
 
-static int
-l1_recv_msg_bin(wa_t *wa, msg_t *msg_l1)
+
+int
+cmd_send_init(wa_t *wa)
 {
-	LOG_DEBUG("RECV BIN: tag:%s len:%lu\n",
-			msg_l1->tag, msg_l1->len);
+	struct timespec tp;
+	msg_t *msg, *res;
+	const char *ref;
+	json_object *jo, *jref;
 
-	if(msg_l1->len == 0)
-	{
-		LOG_INFO("Empty msg with tag:%s, ignoring\n",
-			msg_l1->tag);
-		return 0;
-	}
+	assert(wa->client_id);
 
-	return l2_recv_msg(wa, msg_l1);
+	msg = safe_malloc(sizeof(*msg));
+
+	/* Build cmd */
+
+	msg->len = asprintf((char **) &msg->cmd,
+		"[\"admin\",\"init\",%s,%s,\"%s\",true]",
+		WA_WEB_VERSION, WA_WEB_CLIENT, wa->client_id);
+
+	/* Build tag with the timestamp and tag counter */
+
+	clock_gettime(CLOCK_REALTIME, &tp);
+	wa->login_time = tp.tv_sec;
+
+	asprintf(&msg->tag, "%ld.--%d", wa->login_time, wa->tag_counter++);
+
+//	req->msg = msg;
+//	req->wait_reply = 1;
+//
+//	l1_send(req);
+
+	res = dispatch_request(wa->d, msg, 0);
+
+	LOG_INFO("Received cmd:%s\n", (char *) res->cmd);
+
+	jo = json_tokener_parse(res->cmd);
+
+	assert(jo);
+
+	jref = json_object_object_get(jo, "ref");
+
+	assert(jref);
+
+	ref = json_object_get_string(jref);
+
+	//json_object_put(jref);
+
+	LOG_INFO("Got ref:%s\n", ref);
+	wa->ref = strdup(ref);
+
+	json_object_put(jo);
+
+	free(msg->tag);
+	free(msg->cmd);
+	free(msg);
+
+	free(res->tag);
+	free(res->cmd);
+	free(res);
+
+	return 0;
+}
+
+int
+cmd_send_takeover(wa_t *wa)
+{
+	msg_t *msg;
+	size_t len;
+
+	msg = malloc(sizeof(*msg));
+
+	len = asprintf((char **) &msg->cmd,
+		"[\"admin\",\"login\",\"%s\",\"%s\",\"%s\",\"takeover\"]",
+		wa->client_token,
+		wa->server_token,
+		wa->client_id);
+
+	asprintf(&msg->tag, "%ld.--%d", wa->login_time, wa->tag_counter++);
+	msg->len = len;
+
+	wa->state = WA_STATE_WAIT_CHALLENGE;
+
+//	FIXME
+//	dg = dg_init(1, 0, msg, DG_REPLY);
+//	dg_send(dg);
+
+	if(dispatch_send_msg(wa->d, msg, 0))
+		return -1;
+
+	free(msg->tag);
+	free(msg->cmd);
+	free(msg);
+
+	return 0;
 }
 
 static int
-l1_recv_conn(wa_t *wa, struct json_object *array)
+cmd_recv_conn(wa_t *wa, struct json_object *array)
 {
 	struct json_object *arg_obj, *ref_obj;
 	const char *ref, *server_tok, *client_tok, *browser_tok, *secret;
@@ -92,9 +172,35 @@ l1_recv_conn(wa_t *wa, struct json_object *array)
 	return 0;
 }
 
+static int
+cmd_recv_presence(wa_t *wa, struct json_object *array)
+{
+	struct json_object *arg;
+	const char *type, *jid;
+
+	arg = json_object_array_get_idx(array, 1);
+
+	/* FIXME: Malformed packet should not lead to a crash */
+	assert(arg);
+	assert(json_object_is_type(arg, json_type_object));
+
+	type = json_object_get_string(
+			json_object_object_get(arg, "type"));
+
+	jid = json_object_get_string(
+			json_object_object_get(arg, "id"));
+
+	if(!type || !jid)
+		return -1;
+
+	/* TODO: Do something with this information */
+	LOG_WARN("User %s is %s\n", jid, type);
+
+	return 0;
+}
 
 static int
-l1_send_challenge(wa_t *wa, const char *solution)
+cmd_send_challenge(wa_t *wa, const char *solution)
 {
 	msg_t *msg, *res;
 	size_t len;
@@ -114,6 +220,11 @@ l1_send_challenge(wa_t *wa, const char *solution)
 	msg->len = len;
 
 	wa->state = WA_STATE_SENT_CHALLENGE;
+
+//	FIXME
+//	dg = dg_init(1, 0, msg, DG_REPLY);
+//	dg_send(dg);
+//	dg_recv(dg);
 
 	res = dispatch_request(wa->d, msg, 0);
 
@@ -150,7 +261,7 @@ l1_send_challenge(wa_t *wa, const char *solution)
 }
 
 static int
-l1_recv_challenge(wa_t *wa, json_object *root)
+cmd_recv_challenge(wa_t *wa, json_object *root)
 {
 	const char *challenge;
 	char *solution;
@@ -173,128 +284,37 @@ l1_recv_challenge(wa_t *wa, json_object *root)
 
 	solution = crypto_solve_challenge(wa->c, challenge);
 
-	l1_send_challenge(wa, solution);
+	cmd_send_challenge(wa, solution);
 
 	free(solution);
 
 	return 0;
 }
 
-static int
-l1_recv_cmd(wa_t *wa, struct json_object *array)
+
+int
+cmd_subscribe(wa_t *wa, char *jid)
 {
-	struct json_object *arg;
-	const char *type;
+	msg_t *msg;
 
-	LOG_INFO("CMD received\n");
+	msg = malloc(sizeof(msg_t));
 
-	arg = json_object_array_get_idx(array, 1);
-	assert(arg);
-	assert(json_object_is_type(arg, json_type_object));
+	asprintf(&msg->tag, "%ld.--%d", wa->login_time % 1000, wa->tag_counter++);
+	asprintf((char **) &msg->cmd, ",[\"action\",\"presence\",\"subscribe\",\"%s\"]", jid);
+	msg->len = strlen(msg->cmd);
 
-	type = json_object_get_string(
-			json_object_object_get(arg, "type"));
-
-	if(strcmp(type, "challenge") == 0)
-		return l1_recv_challenge(wa, arg);
-
-	return 0;
-}
-
-static int
-l1_recv_presence(wa_t *wa, struct json_object *array)
-{
-	struct json_object *arg;
-	const char *type, *jid;
-
-	arg = json_object_array_get_idx(array, 1);
-	assert(arg);
-	assert(json_object_is_type(arg, json_type_object));
-
-	type = json_object_get_string(
-			json_object_object_get(arg, "type"));
-
-	jid = json_object_get_string(
-			json_object_object_get(arg, "id"));
-
-	if(!type || !jid)
+	if(dispatch_send_msg(wa->d, msg, 0))
 		return -1;
 
-	LOG_WARN("User %s is %s\n", jid, type);
-
-	return 0;
-}
-
-static int
-l1_recv_json_array(wa_t *wa, struct json_object *array)
-{
-	struct json_object* action_obj;
-	const char *action;
-
-	action_obj = json_object_array_get_idx(array, 0);
-	assert(action_obj);
-	action = json_object_get_string(action_obj);
-	assert(action);
-
-	if(strcmp(action, "Conn") == 0)
-		return l1_recv_conn(wa, array);
-	else if(strcmp(action, "Cmd") == 0)
-		return l1_recv_cmd(wa, array);
-	else if(strcmp(action, "Presence") == 0)
-		return l1_recv_presence(wa, array);
+	free(msg->tag);
+	free(msg->cmd);
+	free(msg);
 
 	return 0;
 }
 
 int
-l1_recv_msg(wa_t *wa, msg_t *msg)
-{
-	/* Unsolicited message arrived */
-
-	/* A very unfortunate coincidence on binary data can lead to a
-	 * beginning valid json sequence */
-
-	struct json_tokener *tok = json_tokener_new();
-	struct json_object *jo = json_tokener_parse_ex(tok, msg->cmd, msg->len);
-	int ret;
-	size_t offset;
-
-	offset = tok->char_offset;
-
-	json_tokener_free(tok);
-
-	if(!jo)
-	{
-		return l1_recv_msg_bin(wa, msg);
-	}
-
-	if(offset != msg->len)
-	{
-		LOG_INFO("Partial json detected. char_offset=%ld, len=%ld\n",
-				offset, msg->len);
-
-		json_object_put(jo);
-
-		return l1_recv_msg_bin(wa, msg);
-	}
-
-	LOG_INFO("JSON RECV: %s\n", ((char *) msg->cmd));
-
-	if(json_object_is_type(jo, json_type_array))
-	{
-		ret = l1_recv_json_array(wa, jo);
-		json_object_put(jo);
-
-		return ret;
-	}
-
-	LOG_WARN("Unknown json msg received: tag:%s cmd:%s\n", msg->tag, msg->cmd);
-	json_object_put(jo);
-	return 0;
-}
-
-int
-l1_send_keep_alive(wa_t *wa)
+cmd_send_keep_alive(wa_t *wa)
 {
 	/* TODO: Should this be in l0 rather than l1? */
 
@@ -356,29 +376,152 @@ l1_send_keep_alive(wa_t *wa)
 	return 0;
 }
 
-int
-l1_presence_subscribe(wa_t *wa, char *jid)
+
+static int
+cmd_recv_cmd(wa_t *wa, struct json_object *array)
 {
-	msg_t *msg;
+	struct json_object *arg;
+	const char *type;
 
-	msg = malloc(sizeof(msg_t));
+	LOG_INFO("CMD received\n");
 
-	asprintf(&msg->tag, "%ld.--%d", wa->login_time % 1000, wa->tag_counter++);
-	asprintf((char **) &msg->cmd, ",[\"action\",\"presence\",\"subscribe\",\"%s\"]", jid);
-	msg->len = strlen(msg->cmd);
+	arg = json_object_array_get_idx(array, 1);
 
-	if(dispatch_send_msg(wa->d, msg, 0))
-		return -1;
+	/* FIXME: Malformed packet should not lead to a crash */
+	assert(arg);
+	assert(json_object_is_type(arg, json_type_object));
 
-	free(msg->tag);
-	free(msg->cmd);
-	free(msg);
+	type = json_object_get_string(
+			json_object_object_get(arg, "type"));
+
+	if(strcmp(type, "challenge") == 0)
+		return cmd_recv_challenge(wa, arg);
 
 	return 0;
 }
 
 int
-l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag)
+cmd_recv(wa_t *wa, struct json_object *array)
+{
+	struct json_object* action_obj;
+	const char *action;
+
+	action_obj = json_object_array_get_idx(array, 0);
+	assert(action_obj);
+	action = json_object_get_string(action_obj);
+	assert(action);
+
+	if(strcmp(action, "Conn") == 0)
+		return cmd_recv_conn(wa, array);
+	else if(strcmp(action, "Cmd") == 0)
+		return cmd_recv_cmd(wa, array);
+	else if(strcmp(action, "Presence") == 0)
+		return cmd_recv_presence(wa, array);
+
+	return 0;
+}
+
+
+/* TODO: Remove this function */
+int
+l1_presence_subscribe(wa_t *wa, char *jid)
+{
+	return cmd_subscribe(wa, jid);
+}
+
+/* TODO: Remove this function */
+int
+l1_send_keep_alive(wa_t *wa)
+{
+	return cmd_send_keep_alive(wa);
+}
+
+static int
+l1_recv_msg_bin(wa_t *wa, msg_t *msg)
+{
+	int ret;
+
+	LOG_DEBUG("RECV BIN: tag:%s len:%lu\n",
+			msg->tag, msg->len);
+
+	if(msg->len == 0)
+	{
+		LOG_INFO("Empty msg with tag:%s, ignoring\n",
+			msg->tag);
+		return 0;
+	}
+
+	dg_t *dg;
+
+	dg = dg_cmd(L1, L2, "recv");
+
+	dg_msg(dg, msg);
+	dg_meta_set(dg, "tag", msg->tag);
+
+	ret = wire_handle(wa, dg);
+
+	dg_free(dg);
+
+	return ret;
+}
+
+/* TODO: Remove legacy recv */
+int
+l1_recv_msg(wa_t *wa, msg_t *msg)
+{
+	/* Unsolicited message arrived. Is it a cmd or a l2 message? */
+
+	/* A very unfortunate coincidence on binary data can lead to a
+	 * beginning valid json sequence */
+
+	struct json_tokener *tok = json_tokener_new();
+	struct json_object *jo = json_tokener_parse_ex(tok, msg->cmd, msg->len);
+	int ret;
+	size_t offset;
+
+	offset = tok->char_offset;
+
+	json_tokener_free(tok);
+
+	if(!jo)
+	{
+		return l1_recv_msg_bin(wa, msg);
+	}
+
+	if(offset != msg->len)
+	{
+		LOG_INFO("Partial json detected. char_offset=%ld, len=%ld\n",
+				offset, msg->len);
+
+		json_object_put(jo);
+
+		return l1_recv_msg_bin(wa, msg);
+	}
+
+	LOG_INFO("JSON RECV: %s\n", ((char *) msg->cmd));
+
+	if(json_object_is_type(jo, json_type_array))
+	{
+		ret = cmd_recv(wa, jo);
+		json_object_put(jo);
+
+		return ret;
+	}
+
+	LOG_WARN("Unknown json msg received: tag:%s cmd:%s\n", msg->tag, msg->cmd);
+	json_object_put(jo);
+	return 0;
+}
+
+int
+l1_recv(wa_t *wa, dg_t *dg)
+{
+	LOG_ERR("Not implemented");
+	return 1;
+}
+
+static int
+l1_send_buf(wa_t *wa, buf_t *in, const char *tag, int metric, int flag)
 {
 	unsigned char *tmp;
 	size_t len;
@@ -392,7 +535,7 @@ l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag)
 	if(!tag)
 		asprintf(&msg->tag, "%ld.--%d", wa->login_time % 1000, wa->tag_counter++);
 	else
-		msg->tag = tag;
+		msg->tag = strdup(tag);
 
 
 	/* TODO: Better design for metric and flag */
@@ -455,3 +598,32 @@ l1_send_buf(wa_t *wa, buf_t *in, char *tag, int metric, int flag)
 
 	return 0;
 }
+
+int
+l1_send(wa_t *wa, dg_t *dg)
+{
+	int metric, flags;
+	const char *tag;
+
+	if(dg_meta_get_int(dg, "metric", &metric)) 
+	{
+		LOG_ERR("Missing required 'metric' key in metadata\n");
+		return 1;
+	}
+
+	if(dg_meta_get_int(dg, "flag", &flags))
+	{
+		LOG_ERR("Missing required 'flag' key in metadata\n");
+		return 1;
+	}
+
+	/* The tag may be NULL, and therefore will be auto-generated */
+	tag = dg_meta_get(dg, "tag");
+
+	return l1_send_buf(wa, dg->data, tag, metric, flags);
+}
+
+
+
+
+

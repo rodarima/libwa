@@ -15,6 +15,9 @@
 
 #define MAX_QUEUE 10
 
+#define WA_WEB_VERSION "[0,3,9309]"
+#define WA_WEB_CLIENT "[\"libwa\",\"Chromium\"]"
+
 enum wa_state
 {
 	WA_STATE_LOGGING = 0,
@@ -118,6 +121,7 @@ typedef struct
 	store_t *s;
 	cb_t *cb;
 	chat_t *chat;
+	FILE *monitor_file;
 } wa_t;
 
 

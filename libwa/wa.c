@@ -11,12 +11,10 @@
 #include "l1.h"
 #include "l4.h"
 #include "chat.h"
+#include "monitor.h"
 
 #define DEBUG LOG_LEVEL_DEBUG
 #include "log.h"
-
-#define WA_WEB_VERSION "[0,3,9309]"
-#define WA_WEB_CLIENT "[\"libwa\",\"Chromium\"]"
 
 
 static int
@@ -149,6 +147,8 @@ wa_init(cb_t *cb, const char *config_dir)
 	wa->s = wa_storage_init(config_dir);
 	wa->last_forwarded = 0;
 	wa->last_timestamp = 0;
+
+	monitor_init(wa, stdout);
 
 	return wa;
 }
